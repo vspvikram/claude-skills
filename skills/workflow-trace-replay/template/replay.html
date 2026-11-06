@@ -566,14 +566,14 @@ function box(col, y, h, id, title, sub, kind, extra = {}) {
 // calls, 'cache' for cache reads, any other id for an outside service (the `k` of its calls).
 const META = {
   title: 'Support Agent Replay',
-  eyebrow: ['Help desk agent', 'main at 1a2b3c4', '2 runs recorded 11 Oct 2026', 'gpt-6-luna'],
+  eyebrow: ['Help desk agent', 'main at 1a2b3c4', '2 runs recorded 11 Oct 2026', 'model-x'],
   thesis: 'Two real tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
   findsNote: 'Read straight from the recordings. Each one opens the run at the moment it happens.',
   app: { name: 'Help desk app' },
   lanes: [
     { id: 'you', name: 'Customer', sub: 'ticket' },
     { id: 'code', name: 'App', sub: 'server code' },
-    { id: 'llm', name: 'OpenAI', sub: 'gpt-6-luna' },
+    { id: 'llm', name: 'OpenAI', sub: 'model-x' },
     { id: 'search', name: 'Search', sub: 'help center', color: 'data' },
     { id: 'helpdesk', name: 'Help desk', sub: 'API', color: 'web' },
     { id: 'cache', name: 'Cache', sub: '1-day store' },
@@ -644,10 +644,10 @@ const RUNS = [
       { a: 5212, b: 5230, st: 'save', title: 'Log the ticket', meta: '2 model calls · 3,022 tokens in', body: 'Tokens, timings and the outcome are logged for the ticket.', calls: [], ref: 'agent.mjs logRun' },
     ],
     net: [
-      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1405, model: 'gpt-6-luna', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_1, customer: { tier: 'Pro', tickets_before: 1 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 612, cached: 0, output: 41, reasoning: 18 }, status: 'completed', size: 1380 },
+      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1405, model: 'model-x', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_1, customer: { tier: 'Pro', tickets_before: 1 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 612, cached: 0, output: 41, reasoning: 18 }, status: 'completed', size: 1380 },
       { i: 1, k: 'cache', s: 'search', a: 1410, b: 1411, hit: false, key: 'search-7f3a…', asked: '/api/search?q=refund policy Pro plan&limit=5', summary: null },
       { i: 2, k: 'search', a: 1412, b: 1690, method: 'GET', host: 'help.example.com', path: '/api/search', params: { q: 'refund policy Pro plan', limit: 5 }, status: 200, summary: { results: ARTICLES.map((x) => ({ title: x.title })) } },
-      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1700, b: 4900, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_1, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Sam, sorry the Pro plan wasn’t the right fit. You bought it 5 days ago, so you can have a full refund: I’ve started it, and it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2410, cached: 612, output: 186, reasoning: 64 }, status: 'completed', size: 4920 },
+      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1700, b: 4900, model: 'model-x', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_1, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Sam, sorry the Pro plan wasn’t the right fit. You bought it 5 days ago, so you can have a full refund: I’ve started it, and it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2410, cached: 612, output: 186, reasoning: 64 }, status: 'completed', size: 4920 },
       { i: 4, k: 'helpdesk', a: 4955, b: 5210, method: 'POST', host: 'desk.example.com', path: '/api/tickets/T-1042/replies', sent: { body: 'Hi Sam, sorry the Pro plan wasn’t the right fit…', status: 'pending_customer' }, status: 201, summary: { id: 'R-88', created: '2026-10-11T18:04:05Z' } },
     ],
     events: [
@@ -687,10 +687,10 @@ const RUNS = [
       { a: 7992, b: 8010, st: 'save', title: 'Log the ticket', meta: '3 model calls · 5,735 tokens in · 1 redraft', body: 'Tokens, timings, the redraft and the outcome are logged for the ticket.', calls: [], ref: 'agent.mjs logRun' },
     ],
     net: [
-      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1320, model: 'gpt-6-luna', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_2, customer: { tier: 'Pro', tickets_before: 0 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 598, cached: 0, output: 39, reasoning: 16 }, status: 'completed', size: 1350 },
+      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1320, model: 'model-x', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_2, customer: { tier: 'Pro', tickets_before: 0 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 598, cached: 0, output: 39, reasoning: 16 }, status: 'completed', size: 1350 },
       { i: 1, k: 'cache', s: 'search', a: 1325, b: 1327, hit: true, key: 'search-7f3a…', asked: '/api/search?q=refund policy Pro plan&limit=5', summary: { results: ARTICLES.map((x) => ({ title: x.title })) } },
-      { i: 2, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1330, b: 4720, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. I’ve started a full refund for your upgrade; it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2402, cached: 598, output: 171, reasoning: 58 }, status: 'completed', size: 4880 },
-      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 4785, b: 7690, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief', fix: 'Do not promise a refund: it was bought 41 days ago and refunds close at 30. Offer the unused time as account credit.' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase, so I can’t refund the upgrade, but I’ve added the unused time as account credit. It’s already on your account.', cites: ['Refunds and cancellations', 'Account credit'] }, usage: { input: 2735, cached: 612, output: 181, reasoning: 71 }, status: 'completed', size: 5310 },
+      { i: 2, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1330, b: 4720, model: 'model-x', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. I’ve started a full refund for your upgrade; it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2402, cached: 598, output: 171, reasoning: 58 }, status: 'completed', size: 4880 },
+      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 4785, b: 7690, model: 'model-x', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief', fix: 'Do not promise a refund: it was bought 41 days ago and refunds close at 30. Offer the unused time as account credit.' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase, so I can’t refund the upgrade, but I’ve added the unused time as account credit. It’s already on your account.', cites: ['Refunds and cancellations', 'Account credit'] }, usage: { input: 2735, cached: 612, output: 181, reasoning: 71 }, status: 'completed', size: 5310 },
       { i: 4, k: 'helpdesk', a: 7735, b: 7990, method: 'POST', host: 'desk.example.com', path: '/api/tickets/T-1057/replies', sent: { body: 'Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase…', status: 'pending_customer' }, status: 201, summary: { id: 'R-91', created: '2026-10-11T18:09:12Z' } },
     ],
     events: [
