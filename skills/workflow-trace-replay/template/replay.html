@@ -567,7 +567,7 @@ function box(col, y, h, id, title, sub, kind, extra = {}) {
 const META = {
   title: 'Support Agent Replay',
   eyebrow: ['Help desk agent', 'main at 1a2b3c4', '2 runs recorded 11 Oct 2026', 'model-x'],
-  thesis: 'Two real tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
+  thesis: 'Two support tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
   findsNote: 'Read straight from the recordings. Each one opens the run at the moment it happens.',
   app: { name: 'Help desk app' },
   lanes: [
@@ -1024,7 +1024,7 @@ function buildSeq(run) {
   for (const s of run.steps) {
     if (s.st === 'in' || s.st === 'signal') {
       const txt = (s.body || '').replace(/[“”]/g, '');
-      msg(LX.you, LX.code, Y(s.a) + 6, txt.length > 30 ? txt.slice(0, 29) + '…' : txt || s.title, 'app', s.a, true);
+      msg(LX.you, LX.code, Y(s.a) + 6, txt.length > 21 ? txt.slice(0, 20) + '…' : txt || s.title, 'app', s.a, true);
     } else if (s.say) {
       msg(LX.code, LX.you, Y(s.a), s.say, 'app', s.a, true);
     }
@@ -1070,7 +1070,10 @@ function buildSeq(run) {
     bt.textContent = `${name} · ${sec(e.b - e.a)}${e.tin != null ? ` · ${fmt(e.tin)} in (${fmt(e.tc)} cached) · ${fmt(e.tout)} out` : ' · cut off'} · click to inspect`;
     els.push(bar);
     if (e.f) { const ft = el('line', { x1: x - 6, x2: x + 6, y1: Y(e.f), y2: Y(e.f), class: 'firsttok seq-el', 'data-a': e.f }, svg); els.push(ft); }
-    msg(x - 6, LX.code, Y(e.b), `${name} ${e.o || ''}`, 'llm ret', e.b, true, { below: true });
+    const next = llm.find((x2) => x2.a >= e.b);
+    const tight = next && Y(next.a) - Y(e.b) < 30; // the next call's label would land on this one: put this one above its line
+    msg(x - 6, LX.code, Y(e.b), `${name} ${e.o || ''}`, 'llm ret', e.b, true, { below: !tight });
+    if (tight) lastLab = Math.max(lastLab, Y(e.b) + 5); // and keep the next call's label clear of this line
     const dur = el('text', { x: x + 12, y: (Y(e.a) + Y(e.b)) / 2 + 3, class: 'lane-sub seq-el', 'data-a': e.a }, svg);
     dur.textContent = Y(e.b) - Y(e.a) > 14 ? sec(e.b - e.a) : '';
     els.push(dur);

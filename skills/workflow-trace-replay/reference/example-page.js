@@ -6,7 +6,7 @@
 const META = {
   title: 'Support Agent Replay',
   eyebrow: ['Help desk agent', 'main at 1a2b3c4', '2 runs recorded 11 Oct 2026', 'model-x'],
-  thesis: 'Two real tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
+  thesis: 'Two support tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
   findsNote: 'Read straight from the recordings. Each one opens the run at the moment it happens.',
   app: { name: 'Help desk app' },
   lanes: [
