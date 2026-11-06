@@ -1,0 +1,1577 @@
+<title>Workflow Replay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an editing-suite replay. Pick a recorded run, then one transport drives three linked views
+   (loop, sequence, funnel) with a step panel beside them and a pop-up for every step's calls;
+   findings, an optional before/after table and limits sit below.
+   Color says who does the work: model calls, app code, outside data. The red playhead is
+   the only accent, as in a video editor's timeline. */
+:root {
+  --bg: #f2f3f6;
+  --surface: #ffffff;
+  --sunk: #eaecf1;
+  --ink: #15171c;
+  --muted: #545b69;
+  --faint: #858c9a;
+  --line: #dcdfe6;
+  --line-2: #c3c8d2;
+  --model: #5b4cd6;
+  --model-soft: #ecebfd;
+  --code: #0d7a66;
+  --code-soft: #e1f2ee;
+  --data: #1b6aaa;
+  --data-soft: #e2eef8;
+  --amber: #a1660a;
+  --web: #b33a64;
+  --cache: #8e95a3;
+  --pass: #1b7a49;
+  --pass-soft: #e1f1e7;
+  --fail: #a9432e;
+  --fail-soft: #f7e6e1;
+  --keep: #646a78;
+  --keep-soft: #eceef2;
+  --play: #df3f2b;
+  --play-soft: rgba(223, 63, 43, .14);
+  --shadow: 0 1px 2px rgba(20, 22, 28, .06), 0 4px 18px rgba(20, 22, 28, .05);
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1014; --surface: #15181e; --sunk: #1b1f27; --ink: #e7e9ee; --muted: #a3aab7; --faint: #6f7685;
+    --line: #262a33; --line-2: #363b46; --model: #9d93ff; --model-soft: #24214a; --code: #43c3a5; --code-soft: #132e28;
+    --data: #62b1ec; --data-soft: #12273a; --amber: #e4a743; --web: #ef7ca3; --cache: #6c7382;
+    --pass: #52c78b; --pass-soft: #142e1f; --fail: #f17e66; --fail-soft: #391c16; --keep: #9ca2af; --keep-soft: #222630;
+    --play: #ff624d; --play-soft: rgba(255, 98, 77, .18); --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 22px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1014; --surface: #15181e; --sunk: #1b1f27; --ink: #e7e9ee; --muted: #a3aab7; --faint: #6f7685;
+  --line: #262a33; --line-2: #363b46; --model: #9d93ff; --model-soft: #24214a; --code: #43c3a5; --code-soft: #132e28;
+  --data: #62b1ec; --data-soft: #12273a; --amber: #e4a743; --web: #ef7ca3; --cache: #6c7382;
+  --pass: #52c78b; --pass-soft: #142e1f; --fail: #f17e66; --fail-soft: #391c16; --keep: #9ca2af; --keep-soft: #222630;
+  --play: #ff624d; --play-soft: rgba(255, 98, 77, .18); --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 22px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--font-body); padding-inline: clamp(16px, 3vw, 40px); padding-block: 36px 80px; -webkit-font-smoothing: antialiased; }
+.page { max-width: 1320px; margin-inline: auto; display: grid; gap: 56px; }
+.page > * { min-width: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font: 700 clamp(2rem, 4.2vw, 3.1rem)/1.02 var(--font-display); letter-spacing: -0.03em; }
+h2 { font: 600 1.45rem/1.2 var(--font-display); letter-spacing: -0.015em; }
+h3 { font: 600 1.02rem/1.35 var(--font-body); }
+p { margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--play); outline-offset: 2px; border-radius: 6px; }
+.mono { font-family: var(--font-mono); font-size: .86em; }
+.muted { color: var(--muted); }
+
+/* Header */
+.top { display: grid; gap: 14px; max-width: 80ch; }
+.eyebrow { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 500 .78rem/1.4 var(--font-mono); color: var(--muted); letter-spacing: .01em; }
+.eyebrow span + span::before { content: "·"; margin-right: 12px; color: var(--faint); }
+.thesis { font-size: 1.12rem; color: var(--muted); max-width: 62ch; }
+.thesis b { color: var(--ink); font-weight: 600; }
+
+/* Run picker */
+.runs { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); }
+.run { text-align: left; display: grid; gap: 8px; align-content: start; padding: 12px 14px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; min-width: 0; }
+.run:hover { border-color: var(--line-2); }
+.run[aria-pressed="true"] { border-color: var(--ink); box-shadow: var(--shadow); }
+.run-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tag { font: 500 .7rem/1 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.run-n { font: 500 .72rem/1 var(--font-mono); color: var(--faint); }
+.run-title { font: 600 .98rem/1.25 var(--font-body); }
+.run-ask { font-size: .82rem; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.run-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.run-track { height: 6px; border-radius: 3px; background: var(--sunk); position: relative; overflow: hidden; }
+.run-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--model) var(--m, 90%), var(--code) 0); }
+.run-sec { font: 500 .74rem/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Stage */
+.stage { display: grid; gap: 12px; }
+.stage-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+.stage-title { display: grid; gap: 4px; min-width: 0; }
+.stage-title p { color: var(--muted); font-size: .92rem; }
+.tabs { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--sunk); gap: 2px; }
+.tab { border: 0; background: none; padding: 7px 14px; border-radius: 8px; font-weight: 500; font-size: .9rem; color: var(--muted); cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+.tab kbd { font: 500 .68rem/1 var(--font-mono); color: var(--faint); border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 4px; }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .78rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.sw.model { background: var(--model); } .sw.code { background: var(--code); } .sw.data { background: var(--data); } .sw.play { background: var(--play); border-radius: 1px; width: 3px; height: 12px; }
+
+.stage-body { display: grid; grid-template-columns: minmax(0, 1fr) 344px; gap: 12px; align-items: start; }
+.stage-body > * { min-width: 0; }
+.canvas { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: grid; }
+.view { padding: 12px; min-width: 0; }
+.view[hidden] { display: none; }
+.scroll-x { overflow-x: auto; overflow-y: hidden; }
+.scroll-y { max-height: 720px; overflow: auto; }
+svg { display: block; }
+.loop-svg { width: 100%; height: auto; min-width: 600px; font-family: var(--font-body); }
+.seq-svg { width: 100%; height: auto; min-width: 600px; font-family: var(--font-body); }
+
+/* Transport */
+.transport { border-top: 1px solid var(--line); padding: 10px 12px 12px; display: grid; gap: 10px; background: var(--surface); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); font-size: .86rem; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn svg { width: 12px; height: 12px; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); min-width: 92px; justify-content: center; }
+.speed { display: inline-flex; border: 1px solid var(--line-2); border-radius: 9px; overflow: hidden; }
+.speed button { border: 0; background: none; height: 32px; padding: 0 10px; font: 500 .78rem/1 var(--font-mono); color: var(--muted); cursor: pointer; }
+.speed button[aria-pressed="true"] { background: var(--sunk); color: var(--ink); }
+.clock { margin-left: auto; display: flex; gap: 12px; align-items: baseline; font: 500 .82rem/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clock b { color: var(--ink); font-weight: 500; font-size: 1rem; }
+.track { position: relative; height: 58px; border-radius: 8px; background: var(--sunk); cursor: pointer; touch-action: none; }
+.track svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--play); left: 0; pointer-events: none; border-radius: 1px; }
+.playhead::before { content: ""; position: absolute; top: -3px; left: -5px; width: 12px; height: 8px; border-radius: 3px; background: var(--play); }
+.ticks { display: flex; justify-content: space-between; font: 400 .7rem/1 var(--font-mono); color: var(--faint); padding-inline: 2px; font-variant-numeric: tabular-nums; }
+.track-lanes { display: flex; gap: 12px; flex-wrap: wrap; font-size: .72rem; color: var(--faint); }
+
+/* Detail panel */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; align-content: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.panel > * { min-width: 0; }
+.p-kicker { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 500 .74rem/1.2 var(--font-mono); color: var(--faint); }
+.kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; font: 600 .72rem/1 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; padding: 5px 8px; border-radius: 6px; }
+.kind.model { background: var(--model-soft); color: var(--model); }
+.kind.code { background: var(--code-soft); color: var(--code); }
+.kind.data { background: var(--data-soft); color: var(--data); }
+.kind.cut { background: var(--fail-soft); color: var(--fail); }
+.p-title { font: 600 1.18rem/1.25 var(--font-display); letter-spacing: -0.01em; }
+.p-meta { font: 400 .76rem/1.5 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.p-body { font-size: .92rem; line-height: 1.55; overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: .78rem; line-height: 1.35; border: 1px solid var(--line); background: var(--sunk); color: var(--ink); }
+.chip i { font-style: normal; font-family: var(--font-mono); font-size: .68rem; color: var(--faint); }
+.chip.pass { background: var(--pass-soft); border-color: transparent; color: var(--ink); }
+.chip.pass::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--pass); flex: none; }
+.chip.fail { background: transparent; border-style: dashed; border-color: var(--line-2); color: var(--muted); }
+.chip.fail::before { content: "✕"; font-size: .64rem; color: var(--fail); }
+.chip.bench, .chip.keep { background: var(--keep-soft); border-color: transparent; color: var(--ink); }
+.chip.bench::before, .chip.keep::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--keep); flex: none; }
+.chip.firm { border-color: var(--ink); background: var(--surface); }
+.chip.soft { border-style: dashed; background: var(--surface); }
+.chip .who { color: var(--muted); font-size: .72rem; }
+.ctx { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--sunk); font-size: .78rem; }
+.ctx b { font: 600 .72rem/1 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ctx ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: .74rem; color: var(--ink); }
+.ctx li span { color: var(--faint); }
+.ref { font: 400 .72rem/1.45 var(--font-mono); color: var(--faint); padding-top: 10px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.ref::before { content: "In code  "; color: var(--muted); }
+.p-steps { display: flex; gap: 6px; }
+.p-steps .btn { flex: 1; justify-content: center; }
+
+/* Loop SVG */
+.region-box { fill: var(--sunk); stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 5 4; }
+.region-sub { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.region-label { font: 600 11px var(--font-mono); fill: var(--muted); letter-spacing: .03em; }
+.node .shape { fill: var(--surface); stroke: var(--line-2); stroke-width: 1.2; transition: fill .2s, stroke .2s; }
+.node .bar { transition: opacity .2s; }
+.node .n-t { font: 600 13px var(--font-body); fill: var(--ink); }
+.node .n-s { font: 400 10.5px var(--font-mono); fill: var(--faint); }
+.node .n-c { font: 600 10.5px var(--font-mono); fill: var(--bg); }
+.node .n-cb { fill: var(--ink); }
+.node.exit .shape { stroke-dasharray: 4 3; }
+.node.na { opacity: .45; }
+.node.visited.model .shape { fill: var(--model-soft); stroke: var(--model); }
+.node.visited.code .shape { fill: var(--code-soft); stroke: var(--code); }
+.node.visited.data .shape { fill: var(--data-soft); stroke: var(--data); }
+.node.current .shape { stroke: var(--play); stroke-width: 2.4; }
+.node.current.cut .shape { fill: var(--fail-soft); }
+.node .halo { fill: none; stroke: var(--play); stroke-width: 6; opacity: 0; }
+.node.current .halo { opacity: .18; }
+.edge path.l { fill: none; stroke: var(--line-2); stroke-width: 1.3; transition: stroke .2s, stroke-width .2s; }
+.edge.dash path.l { stroke-dasharray: 4 4; }
+.edge.done path.l { stroke: var(--ink); stroke-width: 1.8; }
+.edge.now path.l { stroke: var(--play); stroke-width: 2.6; }
+.edge .e-lab { font: 500 10.5px var(--font-mono); fill: var(--faint); }
+.edge.done .e-lab, .edge.now .e-lab { fill: var(--ink); }
+.edge .cnt rect { fill: var(--ink); }
+.edge .cnt text { font: 600 10px var(--font-mono); fill: var(--bg); }
+.edge.now .cnt rect { fill: var(--play); }
+.mk path { fill: var(--line-2); }
+.mk-done path { fill: var(--ink); }
+.mk-now path { fill: var(--play); }
+.token { fill: var(--play); }
+
+/* Sequence SVG */
+.lane-h { font: 600 11.5px var(--font-body); fill: var(--ink); }
+.lane-sub { font: 400 9.5px var(--font-mono); fill: var(--faint); }
+.life { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 4; }
+.gridline { stroke: var(--line); stroke-width: 1; }
+.tick-t { font: 400 10px var(--font-mono); fill: var(--faint); }
+.msg line, .msg path { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+.msg text { font: 500 10.5px var(--font-mono); fill: var(--ink); }
+.msg .small { font-size: 9.5px; fill: var(--muted); }
+.msg.llm line { stroke: var(--model); }
+.msg.ret line { stroke-dasharray: 3 3; }
+.msg.amber line { stroke: var(--amber); }
+.msg.app line { stroke: var(--ink); }
+.act { rx: 2px; }
+.act.llm { fill: var(--model); }
+.act.amber { fill: var(--amber); }
+.cachedot { fill: var(--cache); }
+.cachedot.miss { fill: var(--amber); }
+.firsttok { stroke: var(--bg); stroke-width: 2; }
+.seq-el { transition: opacity .15s; }
+.seq-el.future { opacity: .14; }
+.ph-line { stroke: var(--play); stroke-width: 2; }
+.ph-lab rect { fill: var(--play); }
+.ph-lab text { font: 600 10px var(--font-mono); fill: #fff; }
+.turnband { fill: var(--sunk); }
+.turnlab { font: 600 10px var(--font-mono); fill: var(--muted); }
+.skip text { font: 500 10px var(--font-mono); fill: var(--web); }
+
+/* Funnel */
+.funnel { display: grid; gap: 14px; padding: 4px; }
+.f-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.f-stat { padding: 10px 12px; border-radius: 10px; background: var(--sunk); display: grid; gap: 2px; }
+.f-stat b { font: 600 1.6rem/1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.f-stat span { font-size: .78rem; color: var(--muted); }
+.f-stat.board b { color: var(--pass); }
+.f-stat.fail b { color: var(--fail); }
+.f-group { display: grid; gap: 6px; }
+.f-gh { font: 600 .72rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.f-gh::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.f-row { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr); gap: 10px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.f-row:last-child { border-bottom: 0; }
+.f-lab { display: grid; gap: 4px; font-size: .84rem; font-weight: 500; }
+.f-lab small { font: 400 .72rem/1 var(--font-mono); color: var(--faint); }
+.f-meter { height: 4px; border-radius: 2px; background: var(--sunk); overflow: hidden; }
+.f-meter i { display: block; height: 100%; background: var(--fail); border-radius: 2px; }
+.f-group.board .f-meter i { background: var(--pass); }
+.f-group.keep .f-meter i { background: var(--keep); }
+.f-group.pending .f-meter i { background: var(--play); }
+.chip .x { font: 600 .66rem/1 var(--font-mono); color: var(--fail); }
+.chip.new { animation: pop .35s ease-out; }
+@keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+.f-note { font-size: .8rem; color: var(--faint); }
+.f-empty { padding: 30px 12px; text-align: center; color: var(--muted); font-size: .9rem; }
+
+/* Run summary */
+.summary { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.s-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.s-card h3 { font: 600 .74rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.board-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.board-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .9rem; }
+.board-list .yr { color: var(--faint); font-family: var(--font-mono); font-size: .76rem; margin-left: 4px; }
+.dots { display: inline-flex; gap: 3px; flex: none; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); }
+.dots i.strong { background: var(--pass); }
+.dots i.partial { background: var(--amber); }
+.dots i.weak { background: var(--fail); }
+.reply { font-size: .92rem; line-height: 1.55; }
+.flag { display: flex; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 9px; background: var(--fail-soft); color: var(--ink); font-size: .82rem; }
+.flag::before { content: "!"; flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--fail); color: var(--bg); font: 700 .7rem/16px var(--font-mono); text-align: center; }
+.spend { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: .86rem; }
+.spend dt { color: var(--muted); }
+.spend dd { margin: 0; font-family: var(--font-mono); font-size: .82rem; font-variant-numeric: tabular-nums; text-align: right; }
+.timebar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--sunk); }
+.timebar i { display: block; height: 100%; }
+
+/* Findings */
+.sec { display: grid; gap: 18px; }
+.sec-head { display: grid; gap: 6px; max-width: 72ch; }
+.sec-head p { color: var(--muted); font-size: .95rem; }
+.finds { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.find { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.find-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sev { font: 600 .7rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; }
+.sev.bug { background: var(--fail-soft); color: var(--fail); }
+.sev.waste { background: var(--keep-soft); color: var(--keep); }
+.sev.good { background: var(--pass-soft); color: var(--pass); }
+.find h3 { font-size: 1rem; }
+.find p { font-size: .88rem; color: var(--muted); }
+.find .ev { font: 400 .76rem/1.5 var(--font-mono); color: var(--ink); background: var(--sunk); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+.find .btn { justify-self: start; }
+.find-tags { display: inline-flex; gap: 6px; align-items: center; }
+.status { font: 600 .66rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--line-2); color: var(--muted); }
+.status.fixed { border-color: transparent; background: var(--pass-soft); color: var(--pass); }
+.fixed-note { display: flex; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 9px; background: var(--pass-soft); color: var(--ink); font-size: .82rem; }
+.fixed-note::before { content: "✓"; flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--pass); color: var(--bg); font: 700 .66rem/16px var(--font-mono); text-align: center; }
+
+.changes { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.chg { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.chg h3 { font-size: .95rem; }
+.chg p { font-size: .85rem; color: var(--muted); }
+.chg code { font: 400 .72rem/1.4 var(--font-mono); color: var(--faint); overflow-wrap: anywhere; }
+
+/* Inspector: what a step sent and what came back */
+.node { cursor: pointer; }
+.io-b rect { fill: var(--surface); stroke: var(--line-2); stroke-width: 1; }
+.io-b text { font: 600 8.5px var(--font-mono); fill: var(--muted); letter-spacing: .02em; }
+.node.visited .io-b rect { stroke: var(--ink); }
+.seq-svg [data-call] { cursor: pointer; }
+.insp-open { width: 100%; justify-content: center; }
+dialog.insp { width: min(1180px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 1px solid var(--line-2); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px rgba(0, 0, 0, .35); overflow: hidden; }
+dialog.insp[open] { display: flex; flex-direction: column; }
+dialog.insp::backdrop { background: rgba(10, 12, 16, .55); }
+.insp-head { display: grid; gap: 6px; padding: 14px 18px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.insp-top { display: flex; align-items: center; gap: 10px; }
+.insp-head h2 { font: 600 1.25rem/1.25 var(--font-display); }
+.insp-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.insp-nav #insp-x { margin-left: auto; }
+.insp-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+.insp-body > * { flex: none; }
+.insp-head { flex: none; }
+.insp-body .what { display: grid; gap: 8px; max-width: 90ch; font-size: .92rem; }
+.insp-body .none { padding: 12px 14px; border-radius: 10px; background: var(--code-soft); color: var(--ink); font-size: .9rem; }
+.call { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg); }
+.call.ctx { padding: 12px 14px; }
+.flow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 14px; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.flow .who { font: 600 .74rem/1 var(--font-mono); letter-spacing: .03em; padding: 6px 9px; border-radius: 7px; white-space: nowrap; }
+.who.code { background: var(--code-soft); color: var(--code); }
+.who.model { background: var(--model-soft); color: var(--model); }
+.who.data { background: var(--data-soft); color: var(--data); }
+.who.cache { background: var(--keep-soft); color: var(--keep); }
+.flow .arrow { position: relative; display: grid; justify-items: center; gap: 3px; min-width: 0; text-align: center; }
+.flow .arrow i { position: absolute; left: 0; right: 6px; top: 50%; height: 1.5px; background: var(--line-2); }
+.flow .arrow i::after { content: ""; position: absolute; right: -6px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--line-2); }
+.flow .arrow b, .flow .arrow small { position: relative; background: var(--sunk); padding: 0 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow .arrow b { font: 600 .82rem/1.3 var(--font-mono); }
+.flow .arrow small { font: 400 .72rem/1.3 var(--font-mono); color: var(--muted); }
+.io { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.side { padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.side.req { border-right: 1px solid var(--line); }
+.side h4 { margin: 0; font: 600 .74rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.side h4 small, .blk small, .blk-h small { font: 400 .72rem/1.3 var(--font-mono); color: var(--faint); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+.kv { border-collapse: collapse; font: 400 .78rem/1.4 var(--font-mono); width: 100%; }
+.kv th { text-align: left; font-weight: 500; color: var(--muted); padding: 3px 10px 3px 0; white-space: nowrap; vertical-align: top; width: 1%; }
+.kv td { padding: 3px 0; overflow-wrap: anywhere; }
+.blk { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 8px 10px; min-width: 0; }
+.blk > summary, .blk-h { cursor: pointer; font: 600 .8rem/1.3 var(--font-body); }
+.blk-h { cursor: default; margin-bottom: 6px; }
+.txt { margin: 8px 0 0; max-height: 380px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 .76rem/1.5 var(--font-mono); color: var(--ink); background: var(--sunk); border-radius: 8px; padding: 10px; }
+details.j { font: 400 .76rem/1.5 var(--font-mono); }
+details.j > summary { cursor: pointer; list-style: revert; color: var(--muted); }
+details.j > summary .j-n { color: var(--ink); }
+details.j > summary .j-p { color: var(--faint); }
+details.j ul { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--line); }
+details.j li { overflow-wrap: anywhere; }
+.j-k { color: var(--data); }
+.j-v.j-string { color: var(--pass); white-space: pre-wrap; }
+.j-v.j-number { color: var(--amber); }
+.j-v.j-boolean, .j-v.j-null { color: var(--model); }
+.clist { padding: 8px 14px 12px; display: grid; gap: 2px; }
+.crow > summary { cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; align-items: center; font-size: .78rem; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.crow code { font: 400 .72rem/1.3 var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .cw { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck { font: 600 .66rem/1 var(--font-mono); text-transform: uppercase; padding: 3px 6px; border-radius: 5px; }
+.ck.hit { background: var(--pass-soft); color: var(--pass); }
+.ck.miss { background: var(--fail-soft); color: var(--fail); }
+.clist details.more > summary { cursor: pointer; font-size: .8rem; color: var(--muted); padding: 6px 0; }
+.btn.sm { height: 30px; font-size: .8rem; justify-self: start; }
+.side .note { font-size: .74rem; color: var(--faint); }
+@media (max-width: 860px) {
+  .io { grid-template-columns: minmax(0, 1fr); }
+  .side.req { border-right: 0; border-bottom: 1px solid var(--line); }
+  dialog.insp { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; margin: 0; }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .flow .arrow i { display: none; }
+  .crow > summary { grid-template-columns: auto minmax(0, 1fr); }
+  .crow .cw { grid-column: 2; }
+}
+
+/* Old engine and new */
+.cmp-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.cmp { width: 100%; min-width: 760px; border-collapse: collapse; font-size: .86rem; }
+.cmp th, .cmp td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.cmp thead th { font: 600 .72rem/1.2 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+.cmp tbody th { font-weight: 600; width: 24%; }
+.cmp th small { display: block; font: 400 .74rem/1.4 var(--font-body); color: var(--faint); margin-top: 2px; }
+.cmp tfoot th, .cmp tfoot td { border-bottom: 0; background: var(--sunk); }
+.cmp td.old, .cmp td.new { width: 26%; }
+.cmp td.why { color: var(--muted); }
+.cmp-n { font: 600 1rem/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.cmp-bar { display: block; height: 6px; margin: 6px 0 4px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.cmp-bar i { display: block; height: 100%; border-radius: 3px; background: var(--keep); }
+.cmp td.new .cmp-bar i { background: var(--model); }
+.cmp-sub { display: block; font: 400 .74rem/1.4 var(--font-mono); color: var(--muted); }
+.cmp-sub .bad { color: var(--fail); font-weight: 600; }
+.f-row.later { opacity: .38; }
+.f-group.stages .f-meter i { background: var(--model); }
+.msg.web line { stroke: var(--web); }
+.act.web { fill: var(--web); }
+.p-draft { font-size: .84rem; color: var(--muted); border-left: 2px solid var(--line-2); padding-left: 10px; }
+
+/* Limits */
+.limits { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 6px 16px; }
+.lim { display: grid; grid-template-columns: minmax(11rem, 16rem) minmax(0, 1fr) minmax(10rem, 18rem); gap: 8px 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.lim:last-child { border-bottom: 0; }
+.lim-n { display: grid; gap: 2px; }
+.lim-n b { font-weight: 600; font-size: .9rem; }
+.lim-n code { font: 400 .72rem/1.3 var(--font-mono); color: var(--faint); overflow-wrap: anywhere; }
+.lim-bar { position: relative; height: 22px; }
+.lim-bar .rail { position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: var(--line-2); }
+.lim-bar .cap { position: absolute; right: 0; top: 2px; bottom: 2px; width: 2px; background: var(--ink); }
+.lim-bar .m { position: absolute; top: 5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 2px solid var(--surface); background: var(--model); }
+.lim-bar .m.hit { background: var(--play); }
+.lim-e { font-size: .82rem; color: var(--muted); }
+.lim-e b { color: var(--ink); font-weight: 600; }
+
+/* Footer */
+.foot { display: grid; gap: 10px; font-size: .82rem; color: var(--muted); padding-top: 22px; border-top: 1px solid var(--line); max-width: 92ch; }
+.foot a { color: var(--muted); text-underline-offset: 3px; }
+.foot h3 { font: 600 .74rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+
+@media (max-width: 1040px) {
+  .stage-body { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: static; }
+}
+@media (max-width: 720px) {
+  body { padding-block: 24px 56px; font-size: 14.5px; }
+  .page { gap: 40px; }
+  .lim { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .f-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .clock { margin-left: 0; width: 100%; justify-content: space-between; }
+  .tab kbd { display: none; }
+  .runs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .run { padding: 10px 11px; gap: 6px; }
+  .run-n { display: none; }
+  .run-title { font-size: .9rem; }
+  .run-ask { font-size: .76rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1 id="page-h">Workflow Replay</h1>
+    <p class="thesis" id="thesis"></p>
+  </header>
+
+  <section aria-labelledby="runs-h" class="sec" style="gap:12px">
+    <h2 id="runs-h" class="visually-hidden" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Runs</h2>
+    <div class="runs" id="runs" role="group" aria-label="Recorded runs"></div>
+  </section>
+
+  <section class="stage" aria-labelledby="stage-h">
+    <div class="stage-head">
+      <div class="stage-title">
+        <h2 id="stage-h">One run, three views</h2>
+        <p id="stage-sub">The same moment in each view. Click a box or a call to see what it sent and what came back.</p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="View">
+        <button class="tab" role="tab" id="tab-loop" aria-controls="view-loop" aria-selected="true" data-view="loop">Loop <kbd>1</kbd></button>
+        <button class="tab" role="tab" id="tab-seq" aria-controls="view-seq" aria-selected="false" data-view="seq">Sequence <kbd>2</kbd></button>
+        <button class="tab" role="tab" id="tab-funnel" aria-controls="view-funnel" aria-selected="false" data-view="funnel">Funnel <kbd>3</kbd></button>
+      </div>
+    </div>
+    <div class="legend" aria-label="Legend">
+      <span><i class="sw model"></i>Model call</span>
+      <span><i class="sw code"></i>App code</span>
+      <span><i class="sw data"></i>Outside data</span>
+      <span><i class="sw play"></i>Now</span>
+    </div>
+    <div class="stage-body">
+      <div class="canvas">
+        <div class="view" id="view-loop" role="tabpanel" aria-labelledby="tab-loop">
+          <div class="scroll-x"><svg class="loop-svg" id="loop" role="group" aria-label="The workflow as a state machine, lit by the selected run"></svg></div>
+        </div>
+        <div class="view" id="view-seq" role="tabpanel" aria-labelledby="tab-seq" hidden>
+          <div class="scroll-x scroll-y" id="seq-wrap"><svg class="seq-svg" id="seq" role="group" aria-label="Every call in the selected run, on a timeline"></svg></div>
+        </div>
+        <div class="view" id="view-funnel" role="tabpanel" aria-labelledby="tab-funnel" hidden>
+          <div class="funnel" id="funnel"></div>
+        </div>
+        <div class="transport">
+          <div class="controls">
+            <button class="btn primary" id="play" type="button"><svg viewBox="0 0 12 12" aria-hidden="true" id="play-ico"><path d="M3 1.6v8.8L10.4 6z" fill="currentColor"/></svg><span id="play-lab">Play</span></button>
+            <button class="btn" id="back" type="button"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 2 3.5 6l4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Back</button>
+            <button class="btn" id="next" type="button">Next<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="speed" role="group" aria-label="Playback speed">
+              <button type="button" data-speed="1" aria-pressed="false">1×</button>
+              <button type="button" data-speed="2" aria-pressed="true">2×</button>
+              <button type="button" data-speed="5" aria-pressed="false">5×</button>
+            </div>
+            <div class="clock"><span><b id="clock-t">0.0 s</b> / <span id="clock-total">0 s</span></span><span id="clock-step">step 0 of 0</span></div>
+          </div>
+          <div class="track" id="track" role="slider" tabindex="0" aria-label="Replay position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <svg id="track-svg" preserveAspectRatio="none" viewBox="0 0 1000 58" aria-hidden="true"></svg>
+            <div class="playhead" id="playhead"></div>
+          </div>
+          <div class="ticks" id="ticks"></div>
+        </div>
+      </div>
+      <aside class="panel" id="panel" aria-live="polite" aria-label="This moment"></aside>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="sum-h">
+    <div class="sec-head"><h2 id="sum-h">What this run ended with</h2></div>
+    <div class="summary" id="summary"></div>
+  </section>
+
+  <section class="sec" aria-labelledby="find-h" id="finds-sec">
+    <div class="sec-head">
+      <h2 id="find-h">What the recordings caught</h2>
+      <p id="finds-note">Read straight from the recordings. Each one opens the run at the moment it happens.</p>
+    </div>
+    <div class="finds" id="finds"></div>
+  </section>
+
+  <section class="sec" aria-labelledby="cmp-h" id="cmp-sec" hidden>
+    <div class="sec-head">
+      <h2 id="cmp-h">Before and after, the same requests</h2>
+      <p id="cmp-note"></p>
+    </div>
+    <div class="cmp-wrap scroll-x"><table class="cmp" id="compare"></table></div>
+    <div class="changes" id="changes"></div>
+  </section>
+
+  <section class="sec" aria-labelledby="lim-h" id="lim-sec" hidden>
+    <div class="sec-head">
+      <h2 id="lim-h">The limits every run works inside</h2>
+      <p>Budgets set in code when these runs were recorded, with where each run landed. A red mark hit the limit.</p>
+    </div>
+    <div class="limits" id="limits"></div>
+  </section>
+
+  <footer class="foot" id="foot"></footer>
+</div>
+
+<dialog class="insp" id="inspect" aria-labelledby="insp-h">
+  <header class="insp-head">
+    <div class="insp-top"><span class="kind code" id="insp-kind">Code</span><span class="p-kicker" id="insp-when"></span></div>
+    <h2 id="insp-h">Step</h2>
+    <div class="insp-nav"><button class="btn" type="button" id="insp-prev">Previous step</button><button class="btn" type="button" id="insp-next">Next step</button><button class="btn" type="button" id="insp-x">Close</button></div>
+  </header>
+  <div class="insp-body" id="insp-body"></div>
+</dialog>
+
+<script>
+// The loop view's grid, for FLOWS below: three columns of boxes on a 760-wide drawing.
+const A = { x: 40, w: 180 }, B = { x: 290, w: 180 }, C = { x: 540, w: 180 };
+function box(col, y, h, id, title, sub, kind, extra = {}) {
+  return { id, x: col.x, y, w: col.w, h, title, sub, kind, ...extra };
+}
+/* ================================ DATA ================================
+   META, FLOWS, RUNS, PROMPTS, SCHEMAS, FINDS, FLAGS, COMPARE and LIMITS. scripts/assemble.py
+   replaces this whole block: your page.js, then RUNS, PROMPTS and SCHEMAS from build_runs.py. */
+// The page's words and the sequence view's lanes. Lane ids match event kinds: 'llm' for model
+// calls, 'cache' for cache reads, any other id for an outside service (the `k` of its calls).
+const META = {
+  title: 'Support Agent Replay',
+  eyebrow: ['Help desk agent', 'main at 1a2b3c4', '2 runs recorded 11 Oct 2026', 'gpt-6-luna'],
+  thesis: 'Two real tickets, recorded call by call and played back. **The model drafts; code checks every reply against the refund rules.** Pick a run, press Play, and click any box to see what it sent and what came back.',
+  findsNote: 'Read straight from the recordings. Each one opens the run at the moment it happens.',
+  app: { name: 'Help desk app' },
+  lanes: [
+    { id: 'you', name: 'Customer', sub: 'ticket' },
+    { id: 'code', name: 'App', sub: 'server code' },
+    { id: 'llm', name: 'OpenAI', sub: 'gpt-6-luna' },
+    { id: 'search', name: 'Search', sub: 'help center', color: 'data' },
+    { id: 'helpdesk', name: 'Help desk', sub: 'API', color: 'web' },
+    { id: 'cache', name: 'Cache', sub: '1-day store' },
+  ],
+  services: { llm: { name: 'OpenAI' }, search: { name: 'Help-center search' }, helpdesk: { name: 'Help desk API' } },
+  callNames: { classify_ticket: 'classify', draft_reply: 'draft' },
+  ctxLabels: { ticket: 'ticket', customer: 'customer', articles: 'articles', intent: 'intent', fix: 'fix note' },
+  contextKeys: ['intent', 'fix'],
+  recorded: [
+    'Each run called the agent’s own entry point locally on main at 1a2b3c4, with a test customer and a warm one-day search cache. A wrapper timed every OpenAI, search and help desk request and every cache read.',
+  ],
+};
+
+// One state machine per kind of run. Boxes sit on a 760-wide grid (columns A, B, C); each edge is
+// [id 'from>to', SVG path, label, dashed, { at, up }].
+const FLOWS = {
+  agent: {
+    h: 506,
+    regions: [{ x: 16, y: 84, w: 728, h: 256, label: 'AGENT · 30 S BUDGET' }],
+    nodes: [
+      box(B, 20, 46, 'in', 'Ticket in', 'from the help desk', 'code'),
+      box(B, 96, 50, 'classify', 'Classify', 'triage-v2 · low', 'model'),
+      box(C, 96, 50, 'search', 'Search help center', 'top 5 articles', 'data'),
+      box(B, 176, 54, 'draft', 'Draft the reply', 'reply-v4 · medium', 'model'),
+      { id: 'check', x: 290, y: 262, w: 180, h: 64, title: 'Policy OK?', sub: 'refund rules', kind: 'code', diamond: true },
+      box(A, 268, 52, 'fix', 'Note what to fix', 'code tells the model', 'code'),
+      box(B, 356, 50, 'send', 'Send the reply', 'help desk API', 'data'),
+      box(B, 436, 50, 'save', 'Log the ticket', 'tokens · outcome', 'code'),
+    ],
+    edges: [
+      ['in>classify', 'M380,66 V96'],
+      ['classify>search', 'M470,121 H540', 'intent'],
+      ['search>draft', 'M630,146 V203 H470', '5 articles'],
+      ['classify>draft', 'M380,146 V176'],
+      ['draft>check', 'M380,230 V262'],
+      ['check>fix', 'M290,294 H220', 'no'],
+      ['fix>draft', 'M130,268 V203 H290', 'redraft', false, { at: 0.2 }],
+      ['check>send', 'M380,326 V356', 'yes', false, { at: 0.75 }],
+      ['send>save', 'M380,406 V436'],
+    ],
+    alias: {},
+  },
+};
+
+const TICKET_1 = { id: 'T-1042', subject: 'Refund for Pro plan', body: 'Hi, I bought the Pro plan 5 days ago but it isn’t what I need. Can I get a refund?', plan: 'Pro', purchased: '2026-10-06' };
+const TICKET_2 = { id: 'T-1057', subject: 'Refund please', body: 'I upgraded to Pro last month and barely used it. Please refund me.', plan: 'Pro', purchased: '2026-08-31' };
+const ARTICLES = [
+  { title: 'Refunds and cancellations', excerpt: 'Paid plans can be refunded in full within 30 days of purchase.' },
+  { title: 'Account credit', excerpt: 'After 30 days we can add the unused time as account credit.' },
+  { title: 'Cancel your plan', excerpt: 'Cancel any time from Settings → Billing.' },
+  { title: 'Change plans', excerpt: 'Switch between Basic and Pro; the difference is prorated.' },
+  { title: 'Invoices', excerpt: 'Download invoices from Settings → Billing → History.' },
+];
+const CLASSIFY_PARAMS = { reasoning: { effort: 'low' }, max_output_tokens: 400, store: false, format: { type: 'json_schema', name: 'classify_ticket', strict: true } };
+const DRAFT_PARAMS = { reasoning: { effort: 'medium' }, max_output_tokens: 900, store: false, format: { type: 'json_schema', name: 'draft_reply', strict: true } };
+
+const RUNS = [
+  {
+    id: 'refund-simple', flow: 'agent', label: 'Refund', title: 'Within 30 days', ask: [TICKET_1.body],
+    total: 5230, tokens: { in: 3022, cached: 612, out: 227 }, calls: 2, turns: [{ a: 0, b: 5230 }],
+    steps: [
+      { a: 0, b: 1, st: 'in', title: 'Ticket in', body: `“${TICKET_1.body}”`, meta: 'T-1042 · Pro plan · bought 5 days ago', ref: 'tickets.mjs onTicket → agent.mjs reply' },
+      { a: 5, b: 1405, st: 'classify', title: 'Classify the ticket', meta: 'triage-v2 · effort low · 612 in · 41 out · 1.4 s', body: 'A small call reads the ticket and says what it is about, how urgent it is, and what to search for.', chips: [{ t: 'refund', k: 'firm', c: 'intent' }, { t: 'normal', k: 'soft', c: 'urgency' }], ctx: { ticket: 1, customer: 1 }, calls: [0], ref: 'agent.mjs classify' },
+      { a: 1410, b: 1690, st: 'search', title: 'Search the help center', meta: '1 cache read (miss) · 1 live search · 0.3 s', body: 'Code searches the help center with the model’s query and keeps the top five articles.', chips: ARTICLES.map((x) => ({ t: x.title, k: 'keep' })), calls: [1, 2], ref: 'search.mjs helpSearch' },
+      { a: 1700, b: 4900, st: 'draft', title: 'Draft the reply', meta: 'reply-v4 · effort medium · 2,410 in (25% cached) · 186 out · 3.2 s', body: 'The model writes the reply from the ticket and the five articles.', ctx: { ticket: 1, intent: 1, articles: 5 }, calls: [3], ref: 'agent.mjs draft' },
+      { a: 4905, b: 4950, st: 'check', title: 'Policy OK?', meta: 'refund within 30 days · no partial refunds promised', body: 'Yes. The draft offers a full refund 5 days after purchase, inside the 30-day rule.', chips: [{ t: 'within 30 days', k: 'pass' }, { t: 'no partial refund', k: 'pass' }], calls: [], ctx_call: 3, ref: 'policy.mjs checkReply' },
+      { a: 4955, b: 5210, st: 'send', title: 'Send the reply', meta: 'POST /tickets/T-1042/replies · 201', body: 'The reply goes to the customer and the ticket waits for their answer.', calls: [4], say: 'reply sent', ref: 'helpdesk.mjs reply' },
+      { a: 5212, b: 5230, st: 'save', title: 'Log the ticket', meta: '2 model calls · 3,022 tokens in', body: 'Tokens, timings and the outcome are logged for the ticket.', calls: [], ref: 'agent.mjs logRun' },
+    ],
+    net: [
+      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1405, model: 'gpt-6-luna', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_1, customer: { tier: 'Pro', tickets_before: 1 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 612, cached: 0, output: 41, reasoning: 18 }, status: 'completed', size: 1380 },
+      { i: 1, k: 'cache', s: 'search', a: 1410, b: 1411, hit: false, key: 'search-7f3a…', asked: '/api/search?q=refund policy Pro plan&limit=5', summary: null },
+      { i: 2, k: 'search', a: 1412, b: 1690, method: 'GET', host: 'help.example.com', path: '/api/search', params: { q: 'refund policy Pro plan', limit: 5 }, status: 200, summary: { results: ARTICLES.map((x) => ({ title: x.title })) } },
+      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1700, b: 4900, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_1, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Sam, sorry the Pro plan wasn’t the right fit. You bought it 5 days ago, so you can have a full refund: I’ve started it, and it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2410, cached: 612, output: 186, reasoning: 64 }, status: 'completed', size: 4920 },
+      { i: 4, k: 'helpdesk', a: 4955, b: 5210, method: 'POST', host: 'desk.example.com', path: '/api/tickets/T-1042/replies', sent: { body: 'Hi Sam, sorry the Pro plan wasn’t the right fit…', status: 'pending_customer' }, status: 201, summary: { id: 'R-88', created: '2026-10-11T18:04:05Z' } },
+    ],
+    events: [
+      { k: 'llm', a: 5, b: 1405, n: 'classify_ticket', c: 0, tin: 612, tc: 0, tout: 41, o: '→ answer' },
+      { k: 'cache', s: 'search', a: 1410, b: 1411, n: 1, miss: 1 },
+      { k: 'search', a: 1412, b: 1690, n: 'search', c: 2 },
+      { k: 'llm', a: 1700, b: 4900, n: 'draft_reply', c: 3, tin: 2410, tc: 612, tout: 186, o: '→ answer' },
+      { k: 'helpdesk', a: 4955, b: 5210, n: 'reply', c: 4 },
+    ],
+    funnels: [{
+      a: 0, b: 5230,
+      stats: [{ n: 5, label: 'articles found', at: 1690 }, { n: 1, label: 'cited in the reply', at: 4900 }, { n: 'yes', label: 'policy OK', at: 4950, cls: 'board' }],
+      stages: [
+        { lab: 'Articles found', n: 5, at: 1690, sub: 'help-center search', chips: ARTICLES.map((x) => ({ t: x.title, k: 'keep' })) },
+        { lab: 'Given to the model', n: 5, at: 1700, sub: 'all five, with excerpts', chips: [] },
+        { lab: 'Cited in the reply', n: 1, at: 4900, sub: 'from the draft’s cites', chips: [{ t: 'Refunds and cancellations', k: 'pass' }] },
+      ],
+    }],
+    summary: [
+      { h: 'Ticket, as classified', chips: [{ t: 'refund', k: 'firm', c: 'intent' }, { t: 'normal', k: 'soft', c: 'urgency' }] },
+      { h: 'Reply sent', text: '“Hi Sam, sorry the Pro plan wasn’t the right fit. You bought it 5 days ago, so you can have a full refund: I’ve started it, and it reaches your card in 3–5 working days.”', flag: true },
+    ],
+  },
+  {
+    id: 'refund-late', flow: 'agent', label: 'Refund', title: 'After 41 days', ask: [TICKET_2.body],
+    total: 8010, tokens: { in: 5735, cached: 1210, out: 391 }, calls: 3, turns: [{ a: 0, b: 8010 }],
+    steps: [
+      { a: 0, b: 1, st: 'in', title: 'Ticket in', body: `“${TICKET_2.body}”`, meta: 'T-1057 · Pro plan · bought 41 days ago', ref: 'tickets.mjs onTicket → agent.mjs reply' },
+      { a: 5, b: 1320, st: 'classify', title: 'Classify the ticket', meta: 'triage-v2 · effort low · 598 in · 39 out · 1.3 s', body: 'A small call reads the ticket and says what it is about, how urgent it is, and what to search for.', chips: [{ t: 'refund', k: 'firm', c: 'intent' }, { t: 'normal', k: 'soft', c: 'urgency' }], ctx: { ticket: 1, customer: 1 }, calls: [0], ref: 'agent.mjs classify' },
+      { a: 1325, b: 1327, st: 'search', title: 'Search the help center', meta: '1 cache read (hit) · 0 live', body: 'The same query ran an hour ago, so the five articles come from the cache.', chips: ARTICLES.map((x) => ({ t: x.title, k: 'keep' })), calls: [1], ref: 'search.mjs helpSearch' },
+      { a: 1330, b: 4720, st: 'draft', title: 'Draft the reply', meta: 'reply-v4 · effort medium · 2,402 in (25% cached) · 171 out · 3.4 s', body: 'The model writes the reply from the ticket and the five articles. Nothing in its input says the refund window is closed.', ctx: { ticket: 1, intent: 1, articles: 5 }, calls: [2], ref: 'agent.mjs draft' },
+      { a: 4722, b: 4760, st: 'check', title: 'Policy OK?', meta: 'refund within 30 days: fails at 41 days', body: 'No. The draft promises a full refund 41 days after purchase; the rule allows 30.', chips: [{ t: 'within 30 days', k: 'fail' }, { t: 'no partial refund', k: 'pass' }], calls: [], ctx_call: 2, mark: true, ref: 'policy.mjs checkReply' },
+      { a: 4762, b: 4780, st: 'fix', title: 'Note what to fix', meta: '1 rule broken · redraft 1 of 2', body: 'Code adds a fix note to the next draft’s input: no refund after 30 days; offer the unused time as account credit.', calls: [], ref: 'agent.mjs fixNote' },
+      { a: 4785, b: 7690, st: 'draft', title: 'Draft again, with the fix note', meta: 'reply-v4 · effort medium · 2,735 in (22% cached) · 181 out · 2.9 s', body: 'The model rewrites the reply with the fix note: account credit instead of a refund.', ctx: { ticket: 1, intent: 1, articles: 5, fix: 1 }, calls: [3], ref: 'agent.mjs draft' },
+      { a: 7692, b: 7730, st: 'check', title: 'Policy OK?', meta: 'credit offered · no refund promised', body: 'Yes. The new draft offers account credit and promises no refund.', chips: [{ t: 'within 30 days', k: 'pass' }, { t: 'no partial refund', k: 'pass' }], calls: [], ctx_call: 3, ref: 'policy.mjs checkReply' },
+      { a: 7735, b: 7990, st: 'send', title: 'Send the reply', meta: 'POST /tickets/T-1057/replies · 201', body: 'The reply goes to the customer and the ticket waits for their answer.', calls: [4], say: 'reply sent', ref: 'helpdesk.mjs reply' },
+      { a: 7992, b: 8010, st: 'save', title: 'Log the ticket', meta: '3 model calls · 5,735 tokens in · 1 redraft', body: 'Tokens, timings, the redraft and the outcome are logged for the ticket.', calls: [], ref: 'agent.mjs logRun' },
+    ],
+    net: [
+      { i: 0, k: 'llm', name: 'classify_ticket', pv: 'triage-v2', a: 5, b: 1320, model: 'gpt-6-luna', params: CLASSIFY_PARAMS, prompt: 'p_classify', schema: 's_classify', tools: [], input: { ticket: TICKET_2, customer: { tier: 'Pro', tickets_before: 0 } }, output: { intent: 'refund', urgency: 'normal', needs_articles: true, search: 'refund policy Pro plan' }, usage: { input: 598, cached: 0, output: 39, reasoning: 16 }, status: 'completed', size: 1350 },
+      { i: 1, k: 'cache', s: 'search', a: 1325, b: 1327, hit: true, key: 'search-7f3a…', asked: '/api/search?q=refund policy Pro plan&limit=5', summary: { results: ARTICLES.map((x) => ({ title: x.title })) } },
+      { i: 2, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 1330, b: 4720, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. I’ve started a full refund for your upgrade; it reaches your card in 3–5 working days.', cites: ['Refunds and cancellations'] }, usage: { input: 2402, cached: 598, output: 171, reasoning: 58 }, status: 'completed', size: 4880 },
+      { i: 3, k: 'llm', name: 'draft_reply', pv: 'reply-v4', a: 4785, b: 7690, model: 'gpt-6-luna', params: DRAFT_PARAMS, prompt: 'p_draft', schema: 's_draft', tools: [], input: { ticket: TICKET_2, intent: 'refund', articles: ARTICLES, tone: 'warm, brief', fix: 'Do not promise a refund: it was bought 41 days ago and refunds close at 30. Offer the unused time as account credit.' }, output: { reply: 'Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase, so I can’t refund the upgrade, but I’ve added the unused time as account credit. It’s already on your account.', cites: ['Refunds and cancellations', 'Account credit'] }, usage: { input: 2735, cached: 612, output: 181, reasoning: 71 }, status: 'completed', size: 5310 },
+      { i: 4, k: 'helpdesk', a: 7735, b: 7990, method: 'POST', host: 'desk.example.com', path: '/api/tickets/T-1057/replies', sent: { body: 'Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase…', status: 'pending_customer' }, status: 201, summary: { id: 'R-91', created: '2026-10-11T18:09:12Z' } },
+    ],
+    events: [
+      { k: 'llm', a: 5, b: 1320, n: 'classify_ticket', c: 0, tin: 598, tc: 0, tout: 39, o: '→ answer' },
+      { k: 'cache', s: 'search', a: 1325, b: 1327, n: 1, miss: 0 },
+      { k: 'llm', a: 1330, b: 4720, n: 'draft_reply', c: 2, tin: 2402, tc: 598, tout: 171, o: '→ answer' },
+      { k: 'llm', a: 4785, b: 7690, n: 'draft_reply', c: 3, tin: 2735, tc: 612, tout: 181, o: '→ answer' },
+      { k: 'helpdesk', a: 7735, b: 7990, n: 'reply', c: 4 },
+    ],
+    funnels: [{
+      a: 0, b: 8010,
+      stats: [{ n: 5, label: 'articles found', at: 1327 }, { n: 2, label: 'drafts written', at: 7690 }, { n: 'yes', label: 'policy OK on draft 2', at: 7730, cls: 'board' }],
+      stages: [
+        { lab: 'Articles found', n: 5, at: 1327, sub: 'from the cache', chips: ARTICLES.map((x) => ({ t: x.title, k: 'keep' })) },
+        { lab: 'Draft 1 cited', n: 1, at: 4720, sub: 'promised a refund', chips: [{ t: 'Refunds and cancellations', k: 'fail' }] },
+        { lab: 'Draft 2 cited', n: 2, at: 7690, sub: 'credit instead', chips: [{ t: 'Refunds and cancellations', k: 'pass' }, { t: 'Account credit', k: 'pass' }] },
+      ],
+      away: { at: 4760, title: 'Why a draft was turned back', list: [{ reason: 'promises a refund after 30 days', count: 1, examples: ['draft 1'] }] },
+    }],
+    summary: [
+      { h: 'Ticket, as classified', chips: [{ t: 'refund', k: 'firm', c: 'intent' }, { t: 'normal', k: 'soft', c: 'urgency' }] },
+      { h: 'Reply sent', text: '“Hi Alex, sorry Pro didn’t work out. Refunds close 30 days after purchase, so I can’t refund the upgrade, but I’ve added the unused time as account credit. It’s already on your account.”', flag: true },
+    ],
+  },
+];
+
+// Every instruction text and response format, once each; calls point at them by key.
+const PROMPTS = {
+  p_classify: 'You triage help-desk tickets. Read the ticket and return its intent (refund, bug, billing, how_to or other), its urgency, and whether help-center articles would help; if so, give a short search query. Never answer the customer.',
+  p_draft: 'You write replies for the help desk. Use only the articles given, and quote no prices, dates or promises they don’t state. Be warm and brief: at most 120 words, signed by no one. If a fix note is present, follow it exactly.',
+};
+const SCHEMAS = {
+  s_classify: { type: 'object', additionalProperties: false, required: ['intent', 'urgency', 'needs_articles', 'search'], properties: { intent: { type: 'string', enum: ['refund', 'bug', 'billing', 'how_to', 'other'] }, urgency: { type: 'string', enum: ['low', 'normal', 'high'] }, needs_articles: { type: 'boolean' }, search: { type: ['string', 'null'] } } },
+  s_draft: { type: 'object', additionalProperties: false, required: ['reply', 'cites'], properties: { reply: { type: 'string' }, cites: { type: 'array', items: { type: 'string' } } } },
+};
+
+// Findings, read from the recordings only. go: [run id, view, time in ms].
+const FINDS = [
+  { sev: 'good', tag: 'Caught', title: 'The policy check stopped a refund the rules don’t allow', body: 'The first draft promised a full refund 41 days after purchase. Code checked it against the 30-day rule, turned it back with a fix note, and the second draft offered account credit.', ev: 'After 41 days: draft 1 fails “within 30 days”, draft 2 passes', go: ['refund-late', 'loop', 4722] },
+  { sev: 'waste', tag: 'Input', title: 'The first draft never sees the refund rule', body: 'The draft’s input has the ticket and five articles but not the purchase rule code checks it against, so a late refund always costs a second draft.', ev: 'After 41 days: redraft 2.9 s and 2,735 input tokens', go: ['refund-late', 'seq', 4785] },
+  { sev: 'good', tag: 'Speed', title: 'A repeated search costs nothing', body: 'The same query ran an hour earlier, so the five articles came from the cache in 2 ms instead of a 0.3 s live search.', ev: 'After 41 days: 1 cache hit, 0 live searches', go: ['refund-late', 'seq', 1325] },
+];
+// One warning per run, shown under its final answer.
+const FLAGS = {
+  'refund-late': 'The first draft promised a refund the rules don’t allow; only the policy check caught it.',
+};
+// Optional: the same requests on an earlier version (null hides the section).
+const COMPARE = {
+  title: 'Before and after, the same tickets',
+  note: 'reply-v3 (2 Oct) beside reply-v4, same tickets, same cache.',
+  cols: ['reply-v3 · 2 Oct', 'reply-v4 · 11 Oct'],
+  rows: [
+    { label: 'Within 30 days', ask: 'T-1042', before: { total: 6900, calls: 2, tin: 3810, out: '1 reply' }, after: { total: 5230, calls: 2, tin: 3022, out: '1 reply' }, why: 'Shorter instructions.' },
+    { label: 'After 41 days', ask: 'T-1057', before: { total: 11800, calls: 4, tin: 8950, out: '1 reply', bad: '2 redrafts' }, after: { total: 8010, calls: 3, tin: 5735, out: '1 reply' }, why: 'The fix note names the rule.' },
+  ],
+  foot: 'Totals for the two tickets.',
+  changes: [{ h: 'A fix note, not a retry', p: 'A failed check now tells the model which rule it broke.', code: 'agent.mjs fixNote' }],
+};
+// Optional: budgets in code and where each run landed (null hides the section).
+const LIMITS = [
+  { n: 'Turn time', code: 'AGENT_BUDGET_MS 30 s', cap: 30000, unit: 'ms', hitAt: 29000, pts: [['refund-simple', 5230], ['refund-late', 8010]], e: 'Both tickets finished well inside it.' },
+  { n: 'Redrafts', code: 'MAX_REDRAFTS 2', cap: 2, unit: 'n', hitAt: 2, pts: [['refund-simple', 0], ['refund-late', 1]], e: 'One redraft, for the late refund.' },
+];
+/* ================================ ENGINE ================================ */
+// Steps that start on the same millisecond get 1 ms apart, so each one can be stepped to.
+for (const run of RUNS) {
+  for (let k = 1; k < run.steps.length; k++) {
+    const s = run.steps[k], p = run.steps[k - 1];
+    if (s.a <= p.a) { s.a = p.a + 1; s.b = Math.max(s.b, s.a); }
+  }
+  run.total = Math.max(run.total, run.steps.at(-1).b);
+  run.net = run.net || [];
+  run.events = run.events || [];
+}
+
+// ---------- helpers ----------
+const $ = (s) => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;
+const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const chipCls = (k) => (['pass', 'fail', 'bench', 'firm', 'soft', 'keep'].includes(k) ? k : '');
+const chipsHtml = (list) => (list || []).map((c) => `<span class="chip ${chipCls(c.k)}">${esc(c.t)}${c.c ? ` <i>${esc(c.c)}</i>` : ''}</span>`).join('');
+
+// ---------- the state machines ----------
+const KIND_OF = {};
+for (const f of Object.values(FLOWS)) for (const n of f.nodes) KIND_OF[n.id] = KIND_OF[n.id] || n.kind;
+const KIND_LABEL = { model: 'Model call', code: 'App code', data: 'Outside data', cut: 'Cut off' };
+
+const S = { run: RUNS[0], view: 'loop', t: RUNS[0].total, playing: false, speed: 2, idx: -1 };
+const flowOf = (run) => FLOWS[run.flow];
+const alias = (run, st) => (flowOf(run).alias || {})[st] || st;
+// A step's kind: its own, else its box's.
+const kindOf = (run, s) => s.kind || KIND_OF[alias(run, s.st)] || 'code';
+
+function stepAt(run, t) {
+  let i = -1;
+  for (let k = 0; k < run.steps.length; k++) if (run.steps[k].a <= t) i = k;
+  return i;
+}
+
+// ---------- run picker ----------
+const MAXT = Math.max(...RUNS.map((r) => r.total));
+function modelShare(run) {
+  const iv = run.events.filter((e) => e.k === 'llm').map((e) => [e.a, e.b]).sort((a, b) => a[0] - b[0]);
+  let tot = 0, cur = null;
+  for (const [a, b] of iv) { if (cur && a <= cur[1]) cur[1] = Math.max(cur[1], b); else { if (cur) tot += cur[1] - cur[0]; cur = [a, b]; } }
+  if (cur) tot += cur[1] - cur[0];
+  return tot / run.total;
+}
+function renderRuns() {
+  const host = $('#runs');
+  host.innerHTML = RUNS.map((r) => `
+    <button class="run" type="button" data-run="${esc(r.id)}" aria-pressed="false">
+      <span class="run-top"><span class="tag">${esc(r.label)}</span><span class="run-n">${r.calls} model call${r.calls === 1 ? '' : 's'}</span></span>
+      <span class="run-title">${esc(r.title)}</span>
+      <span class="run-ask">${r.ask.map((a) => '“' + esc(a) + '”').join(' then ')}</span>
+      <span class="run-bar"><span class="run-track"><span class="run-fill" style="width:${(100 * r.total / MAXT).toFixed(1)}%;--m:${(100 * modelShare(r)).toFixed(0)}%"></span></span><span class="run-sec">${sec(r.total)}</span></span>
+    </button>`).join('');
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('.run');
+    if (b) selectRun(b.dataset.run, { t: 'end' });
+  });
+}
+
+// ---------- loop view ----------
+let loopEls = null;
+function arrowDefs(svg) {
+  const defs = el('defs', {}, svg);
+  for (const [id, cls] of [['ar', 'mk'], ['ar-done', 'mk-done'], ['ar-now', 'mk-now']]) {
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse', class: cls }, defs);
+    el('path', { d: 'M0,1 L10,5 L0,9 Z' }, m);
+  }
+}
+function buildLoop(run) {
+  const f = flowOf(run);
+  const svg = $('#loop');
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', `0 0 760 ${f.h}`);
+  arrowDefs(svg);
+  for (const r of f.regions || []) {
+    el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 14, class: r.cls || 'region-box' }, svg);
+    const t = el('text', { x: r.x + 14, y: r.y + 20, class: 'region-label' }, svg);
+    t.textContent = r.label;
+  }
+  const edges = {};
+  const gE = el('g', {}, svg);
+  for (const [id, d, label, dash] of f.edges) {
+    const g = el('g', { class: 'edge' + (dash ? ' dash' : ''), 'data-id': id }, gE);
+    const p = el('path', { d, class: 'l', 'marker-end': 'url(#ar)' }, g);
+    edges[id] = { g, p, label };
+  }
+  const nodes = {};
+  const gN = el('g', {}, svg);
+  const withCalls = new Set(run.steps.filter((s) => s.calls && s.calls.length).map((s) => alias(run, s.st)));
+  for (const n of f.nodes) {
+    const g = el('g', { class: `node ${n.kind}${n.exit ? ' exit' : ''}`, 'data-id': n.id, tabindex: 0, role: 'button', 'aria-label': `${n.title}: open what it sent and got back` }, gN);
+    const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+    if (n.diamond) {
+      const d = `M${cx},${n.y} L${n.x + n.w},${cy} L${cx},${n.y + n.h} L${n.x},${cy} Z`;
+      el('path', { d, class: 'halo' }, g);
+      el('path', { d, class: 'shape' }, g);
+    } else {
+      el('rect', { x: n.x - 3, y: n.y - 3, width: n.w + 6, height: n.h + 6, rx: 13, class: 'halo' }, g);
+      el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 10, class: 'shape' }, g);
+    }
+    const t = el('text', { x: cx, y: cy - 2, 'text-anchor': 'middle', class: 'n-t' }, g);
+    t.textContent = n.title;
+    const s = el('text', { x: cx, y: cy + 13, 'text-anchor': 'middle', class: 'n-s' }, g);
+    s.textContent = n.sub || '';
+    if (withCalls.has(n.id)) {
+      const io = el('g', { class: 'io-b' }, g);
+      el('rect', { x: n.x + 8, y: n.y - 7, width: 26, height: 14, rx: 7 }, io);
+      const it = el('text', { x: n.x + 21, y: n.y + 3, 'text-anchor': 'middle' }, io);
+      it.textContent = 'i/o';
+    }
+    const cg = el('g', { class: 'ncount', hidden: '' }, g);
+    const bx = n.diamond ? n.x + n.w * 0.75 : n.x + n.w - 8, by = n.diamond ? n.y + n.h * 0.25 - 6 : n.y;
+    el('rect', { x: bx - 14, y: by - 8, width: 28, height: 16, rx: 8, class: 'n-cb' }, cg);
+    const ct = el('text', { x: bx, y: by + 3.5, 'text-anchor': 'middle', class: 'n-c' }, cg);
+    nodes[n.id] = { g, cg, ct, n };
+    g.addEventListener('click', () => jumpToNode(n.id));
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToNode(n.id); } });
+  }
+  // Edge labels and count badges after the boxes, so they sit on top. An edge may set where its
+  // label sits along it (`at`, 0–1) and turn it upright (`up`) on a vertical run.
+  const gL = el('g', {}, svg);
+  for (const [id, d, label, , opt = {}] of f.edges) {
+    const e = edges[id];
+    const len = e.p.getTotalLength();
+    const mid = e.p.getPointAtLength(len / 2);
+    if (label) {
+      const horiz = /^M[\d.,]+ H[\d.]+$/.test(d);
+      const pt = e.p.getPointAtLength(len * (opt.at ?? (horiz ? 0.5 : 0.3)));
+      const lab = el('text', { x: horiz ? pt.x : pt.x + 6, y: pt.y - 6, class: 'e-lab', 'text-anchor': horiz ? 'middle' : 'start' }, gL);
+      if (opt.up) { lab.setAttribute('text-anchor', 'middle'); lab.setAttribute('x', pt.x - 8); lab.setAttribute('y', pt.y); lab.setAttribute('transform', `rotate(-90 ${pt.x - 8} ${pt.y})`); }
+      lab.textContent = label;
+      e.g.appendChild(lab);
+    }
+    const cg = el('g', { class: 'cnt', hidden: '' }, e.g);
+    el('rect', { x: mid.x - 13, y: mid.y - 8, width: 26, height: 16, rx: 8 }, cg);
+    const ct = el('text', { x: mid.x, y: mid.y + 3.5, 'text-anchor': 'middle' }, cg);
+    e.cnt = { cg, ct };
+  }
+  const token = el('circle', { r: 5.5, class: 'token', hidden: '' }, svg);
+  loopEls = { nodes, edges, token, run: run.id };
+}
+function transitionsUpTo(run, i) {
+  const counts = {}, visits = {};
+  let prev = null, last = null;
+  for (let k = 0; k <= i && k < run.steps.length; k++) {
+    const s = run.steps[k];
+    // A sub-step (an item streaming onto the screen, say) belongs to the step before it.
+    if (s.sub) continue;
+    const st = alias(run, s.st);
+    visits[st] = (visits[st] || 0) + 1;
+    const froms = s.fr ? s.fr.map((x) => alias(run, x)) : prev ? [prev] : [];
+    for (const f of froms) {
+      if (f === st) continue;
+      const key = `${f}>${st}`;
+      counts[key] = (counts[key] || 0) + 1;
+      if (k === i) last = key;
+    }
+    prev = st;
+  }
+  return { counts, visits, last };
+}
+function updateLoop() {
+  const run = S.run;
+  if (!loopEls || loopEls.run !== run.id) buildLoop(run);
+  const i = S.idx;
+  const { counts, visits, last } = transitionsUpTo(run, i);
+  const cur = i >= 0 ? alias(run, run.steps[i].st) : null;
+  const isCut = i >= 0 && run.steps[i].kind === 'cut';
+  for (const [id, o] of Object.entries(loopEls.nodes)) {
+    const v = visits[id] || 0;
+    o.g.classList.toggle('visited', v > 0);
+    o.g.classList.toggle('current', id === cur);
+    o.g.classList.toggle('cut', id === cur && isCut);
+    o.cg.toggleAttribute('hidden', v <= 1);
+    o.ct.textContent = `×${v}`;
+  }
+  for (const [id, e] of Object.entries(loopEls.edges)) {
+    const n = counts[id] || 0;
+    const now = id === last;
+    e.g.classList.toggle('done', n > 0 && !now);
+    e.g.classList.toggle('now', now);
+    e.p.setAttribute('marker-end', now ? 'url(#ar-now)' : n > 0 ? 'url(#ar-done)' : 'url(#ar)');
+    e.cnt.cg.toggleAttribute('hidden', n <= 1);
+    e.cnt.ct.textContent = `×${n}`;
+  }
+  return last;
+}
+let tokenAnim = null;
+function animateToken(edgeId) {
+  if (reduce || !loopEls || !edgeId || S.view !== 'loop') return;
+  const e = loopEls.edges[edgeId];
+  if (!e) return;
+  const tok = loopEls.token, len = e.p.getTotalLength(), t0 = performance.now(), dur = Math.min(520, 160 + len * 0.9);
+  cancelAnimationFrame(tokenAnim);
+  tok.removeAttribute('hidden');
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    const pt = e.p.getPointAtLength(len * (1 - Math.pow(1 - k, 2)));
+    tok.setAttribute('cx', pt.x); tok.setAttribute('cy', pt.y);
+    if (k < 1) tokenAnim = requestAnimationFrame(step); else tok.setAttribute('hidden', '');
+  };
+  tokenAnim = requestAnimationFrame(step);
+}
+function jumpToNode(id) {
+  const run = S.run;
+  const idxs = run.steps.map((s, k) => [alias(run, s.st), k, s]).filter(([st, , s]) => st === id && !s.sub).map(([, k]) => k);
+  if (!idxs.length) return;
+  // The next visit after now, else the first; the box opens what that step sent and got back.
+  const nxt = idxs.find((k) => k > S.idx) ?? idxs[0];
+  pause();
+  seek(run.steps[nxt].a);
+  openInspect(nxt);
+}
+
+// ---------- sequence view ----------
+const LANES = META.lanes;
+const LX = Object.fromEntries(LANES.map((l, k) => [l.id, Math.round(64 + (k * (704 - 64)) / Math.max(1, LANES.length - 1))]));
+const laneOf = (e) => (e.k === 'llm' ? 'llm' : e.k === 'cache' ? 'cache' : e.k);
+let seqEls = null;
+function buildSeq(run) {
+  const svg = $('#seq');
+  svg.innerHTML = '';
+  const total = run.total;
+  const pps = Math.max(15, Math.min(64, 620 / (total / 1000)));
+  const top = 58;
+  const Y = (ms) => top + (ms / 1000) * pps;
+  const H = Y(total) + 26;
+  svg.setAttribute('viewBox', `0 0 760 ${H}`);
+  arrowDefs(svg);
+  const els = [];
+  if (run.turns.length > 1) run.turns.forEach((t, k) => {
+    if (k % 2 === 1) el('rect', { x: 34, y: Y(t.a), width: 718, height: Y(t.b) - Y(t.a), class: 'turnband' }, svg);
+    const tl = el('text', { x: 748, y: Y(t.a) + 12, 'text-anchor': 'end', class: 'turnlab' }, svg); tl.textContent = `TURN ${k + 1}`;
+  });
+  const every = total > 20000 ? 5000 : total > 9000 ? 2000 : 1000;
+  for (let ms = 0; ms <= total; ms += every) {
+    el('line', { x1: 34, x2: 752, y1: Y(ms), y2: Y(ms), class: 'gridline' }, svg);
+    const t = el('text', { x: 6, y: Y(ms) + 3, class: 'tick-t' }, svg); t.textContent = `${ms / 1000}s`;
+  }
+  for (const l of LANES) {
+    const t = el('text', { x: LX[l.id], y: 20, 'text-anchor': 'middle', class: 'lane-h' }, svg); t.textContent = l.id === 'you' && run.you ? run.you : l.name;
+    const s = el('text', { x: LX[l.id], y: 33, 'text-anchor': 'middle', class: 'lane-sub' }, svg); s.textContent = l.sub || '';
+    el('line', { x1: LX[l.id], x2: LX[l.id], y1: 42, y2: H - 8, class: 'life' }, svg);
+  }
+  const msg = (x1, x2, y, label, cls, a, small, opt = {}) => {
+    const g = el('g', { class: `msg seq-el ${cls}`, 'data-a': a }, svg);
+    const line = el('line', { x1, x2: x2 + (x2 > x1 ? -3 : 3), y1: y, y2: y, 'marker-end': 'url(#ar-done)' }, g);
+    if (opt.color) line.style.stroke = `var(--${opt.color})`;
+    if (label) {
+      const t = el('text', { x: opt.x ?? (x1 + x2) / 2, y: opt.below ? y + 11 : y - 4, 'text-anchor': opt.anchor || 'middle', class: small ? 'small' : '' }, g);
+      t.textContent = label;
+    }
+    els.push(g);
+    return g;
+  };
+  // The person's side: what came in, and what the app showed (a step's `say`).
+  for (const s of run.steps) {
+    if (s.st === 'in' || s.st === 'signal') {
+      const txt = (s.body || '').replace(/[“”]/g, '');
+      msg(LX.you, LX.code, Y(s.a) + 6, txt.length > 30 ? txt.slice(0, 29) + '…' : txt || s.title, 'app', s.a, true);
+    } else if (s.say) {
+      msg(LX.code, LX.you, Y(s.a), s.say, 'app', s.a, true);
+    }
+  }
+  // Outside services: clusters of calls per lane, each opening its calls.
+  for (const lane of LANES.filter((l) => !['you', 'code', 'llm', 'cache'].includes(l.id))) {
+    const evs = run.events.filter((e) => laneOf(e) === lane.id);
+    const clusters = [];
+    for (const e of evs) {
+      const c = clusters.at(-1);
+      if (c && e.a - c.b < 260) { c.items.push(e); c.b = Math.max(c.b, e.b); } else clusters.push({ a: e.a, b: e.b, items: [e] });
+    }
+    for (const c of clusters) {
+      const tally = {};
+      for (const x of c.items) tally[x.n || 'call'] = (tally[x.n || 'call'] || 0) + 1;
+      const tops = Object.entries(tally).sort((p, q) => q[1] - p[1]);
+      const late = c.items.filter((x) => x.x === 'timeout').length;
+      msg(LX.code, LX[lane.id] - 4, Y(c.a), `${tops[0][0]}${tops.length > 1 ? '+' : ''}${c.items.length > 1 ? ' ×' + c.items.length : ''}${late ? ` · ${late} timed out` : ''}`, 'svc', c.a, true, { x: LX[lane.id] + 8, anchor: 'start', below: true, color: lane.color || 'data' });
+      const bar = el('rect', { x: LX[lane.id] - 4, y: Y(c.a), width: 8, height: Math.max(3, Y(c.b) - Y(c.a)), class: 'act seq-el', 'data-a': c.a, 'data-call': c.items[0].c ?? '' }, svg);
+      bar.style.fill = `var(--${lane.color || 'data'})`;
+      els.push(bar);
+    }
+  }
+  // Model calls: request, active bar, answer. Overlapping calls sit side by side.
+  const llm = run.events.filter((e) => e.k === 'llm');
+  const slots = [];
+  let lastLab = -99;
+  const counter = {};
+  for (const e of llm) {
+    let slot = slots.findIndex((end) => end <= e.a);
+    if (slot < 0) { slot = slots.length; slots.push(0); }
+    slots[slot] = e.b;
+    const x = LX.llm + slot * 16;
+    const base = (META.callNames || {})[e.n] || e.n;
+    counter[base] = (counter[base] || 0) + 1;
+    const name = llm.filter((x2) => ((META.callNames || {})[x2.n] || x2.n) === base).length > 1 ? `${base} #${counter[base]}` : base;
+    let ly = Y(e.a);
+    if (ly - lastLab < 12) ly = lastLab + 12;
+    lastLab = ly;
+    msg(LX.code, x - 6, ly, name, 'llm', e.a);
+    const bar = el('rect', { x: x - 6, y: Y(e.a) + 1.5, width: 12, height: Math.max(3, Y(e.b) - Y(e.a) - 3), class: 'act llm seq-el', 'data-a': e.a, 'data-call': e.c ?? '' }, svg);
+    const bt = el('title', {}, bar);
+    bt.textContent = `${name} · ${sec(e.b - e.a)}${e.tin != null ? ` · ${fmt(e.tin)} in (${fmt(e.tc)} cached) · ${fmt(e.tout)} out` : ' · cut off'} · click to inspect`;
+    els.push(bar);
+    if (e.f) { const ft = el('line', { x1: x - 6, x2: x + 6, y1: Y(e.f), y2: Y(e.f), class: 'firsttok seq-el', 'data-a': e.f }, svg); els.push(ft); }
+    msg(x - 6, LX.code, Y(e.b), `${name} ${e.o || ''}`, 'llm ret', e.b, true, { below: true });
+    const dur = el('text', { x: x + 12, y: (Y(e.a) + Y(e.b)) / 2 + 3, class: 'lane-sub seq-el', 'data-a': e.a }, svg);
+    dur.textContent = Y(e.b) - Y(e.a) > 14 ? sec(e.b - e.a) : '';
+    els.push(dur);
+  }
+  // Cache reads, when the run has a cache lane.
+  if (LX.cache != null) {
+    const cache = [];
+    for (const e of run.events.filter((x) => x.k === 'cache')) {
+      const c = cache.at(-1);
+      if (c && e.a - c.a < 300) { c.n += e.n; c.miss += e.miss; } else cache.push({ ...e });
+    }
+    for (const e of cache) {
+      const r = Math.min(9, 2.4 + Math.sqrt(e.n) * 1.3);
+      const g = el('g', { class: 'seq-el', 'data-a': e.a }, svg);
+      const c = el('circle', { cx: LX.cache, cy: Y(e.a), r, class: 'cachedot' + (e.miss ? ' miss' : '') }, g);
+      const tt = el('title', {}, c); tt.textContent = `${e.n} cache reads, ${e.n - e.miss} hits`;
+      if (e.n >= 4) { const t = el('text', { x: LX.cache + r + 4, y: Y(e.a) + 3, class: 'lane-sub' }, g); t.textContent = `${e.n}`; }
+      els.push(g);
+    }
+  }
+  const ph = el('g', {}, svg);
+  el('line', { x1: 34, x2: 752, y1: 0, y2: 0, class: 'ph-line' }, ph);
+  const lab = el('g', { class: 'ph-lab' }, ph);
+  el('rect', { x: 0, y: -8, width: 34, height: 16, rx: 3 }, lab);
+  const lt = el('text', { x: 17, y: 3.5, 'text-anchor': 'middle' }, lab);
+  seqEls = { run: run.id, els, ph, lt, Y, H };
+}
+function updateSeq() {
+  const run = S.run;
+  if (!seqEls || seqEls.run !== run.id) buildSeq(run);
+  const y = seqEls.Y(S.t);
+  seqEls.ph.setAttribute('transform', `translate(0 ${y})`);
+  seqEls.lt.textContent = `${(S.t / 1000).toFixed(1)}s`;
+  for (const g of seqEls.els) g.classList.toggle('future', Number(g.dataset.a) > S.t + 0.5);
+  if (S.playing && S.view === 'seq') {
+    const wrap = $('#seq-wrap');
+    const scale = wrap.querySelector('svg').getBoundingClientRect().height / seqEls.H;
+    const py = y * scale;
+    if (py < wrap.scrollTop + 40 || py > wrap.scrollTop + wrap.clientHeight - 60) wrap.scrollTop = Math.max(0, py - wrap.clientHeight / 2);
+  }
+}
+
+// ---------- funnel view ----------
+// Each turn narrows in stages (what the sources found, what passed, what was chosen, what was
+// shown). A stage fills in once the replay reaches it.
+let funnelKey = '';
+function funnelOf(run, t) {
+  const list = run.funnels || [];
+  return list.filter((f) => f.a <= t).at(-1) || list[0];
+}
+function renderFunnel(force) {
+  const run = S.run;
+  const f = funnelOf(run, S.t);
+  const key = `${run.id}:${S.idx}:${S.t >= run.total}`;
+  if (!force && key === funnelKey) return;
+  funnelKey = key;
+  const host = $('#funnel');
+  if (!f) { host.innerHTML = '<div class="f-empty">This run keeps no funnel.</div>'; return; }
+  const on = (at) => at == null || at <= S.t;
+  const max = Math.max(1, ...(f.stages || []).map((s) => s.n || 0));
+  const away = f.away && f.away.list && f.away.list.length && on(f.away.at) ? f.away : null;
+  host.innerHTML = `
+    <div class="f-stats">${(f.stats || []).map((x) => `<div class="f-stat ${x.cls || ''}"><b>${on(x.at) ? esc(x.n ?? '—') : '…'}</b><span>${esc(x.label)}</span></div>`).join('')}</div>
+    <div class="f-group stages">${(f.stages || []).map((s) => `
+      <div class="f-row${on(s.at) ? '' : ' later'}"><div class="f-lab">${esc(s.lab)}<small>${on(s.at) ? esc(s.n ?? '—') : '…'}${s.sub ? ' · ' + esc(s.sub) : ''}</small><span class="f-meter"><i style="width:${on(s.at) ? (100 * (s.n || 0) / max).toFixed(0) : 0}%"></i></span></div>
+      <div class="chips">${on(s.at) ? chipsHtml(s.chips) : ''}</div></div>`).join('')}</div>
+    ${away ? `<div class="f-group fail"><div class="f-gh">${esc(away.title || 'Turned away')}</div>${away.list.map((x) => `
+      <div class="f-row"><div class="f-lab">${esc(x.reason)}<small>${x.count} item${x.count === 1 ? '' : 's'}</small></div><div class="chips">${(x.examples || []).map((t) => `<span class="chip fail">${esc(t)}</span>`).join('')}</div></div>`).join('')}</div>` : ''}
+    ${f.note || run.turns.length > 1 ? `<p class="f-note">${run.turns.length > 1 ? `Turn ${run.funnels.indexOf(f) + 1} of ${run.turns.length}. ` : ''}${esc(f.note || '')}</p>` : ''}`;
+}
+
+// ---------- panel ----------
+const CTX_LABEL = META.ctxLabels || {};
+function renderPanel() {
+  const run = S.run, i = S.idx, host = $('#panel');
+  if (i < 0) {
+    host.innerHTML = `
+      <div class="p-kicker"><span class="kind code">Ready</span><span>${sec(0)}</span></div>
+      <div class="p-title">${esc(run.title)}</div>
+      <p class="p-body">${run.ask.map((a) => '“' + esc(a) + '”').join('<br>')}</p>
+      <p class="p-meta">${run.steps.length} steps · ${run.calls} model calls · ${sec(run.total)}</p>
+      <div class="p-steps"><button class="btn" type="button" data-act="next">First step</button></div>`;
+    return;
+  }
+  const s = run.steps[i];
+  const kind = kindOf(run, s);
+  const ctx = s.ctx ? `<div class="ctx"><b>In the prompt</b><ul>${Object.entries(s.ctx).map(([k, v]) => `<li>${esc(v)} <span>${esc(CTX_LABEL[k] || k.replace(/_/g, ' '))}</span></li>`).join('')}</ul></div>` : '';
+  const turn = run.turns.length > 1 ? ` · turn ${run.turns.findIndex((t) => s.a >= t.a && s.a <= t.b) + 1}` : '';
+  const n = (s.calls || []).length;
+  host.innerHTML = `
+    <div class="p-kicker"><span class="kind ${kind}">${KIND_LABEL[kind]}</span><span>step ${i + 1} of ${run.steps.length}${turn} · ${sec(s.a)}</span></div>
+    <div class="p-title">${esc(s.title)}</div>
+    ${s.meta ? `<p class="p-meta">${esc(s.meta)}</p>` : ''}
+    ${s.body ? `<p class="p-body">${esc(s.body)}</p>` : ''}
+    ${s.draft ? `<p class="p-draft">Draft before code changed it: “${esc(s.draft)}”</p>` : ''}
+    ${s.chips && s.chips.length ? `<div class="chips">${chipsHtml(s.chips)}</div>` : ''}
+    ${ctx}
+    ${s.ref ? `<p class="ref">${esc(s.ref)}</p>` : ''}
+    <button class="btn primary insp-open" type="button" data-inspect="${i}">${n ? `Inspect input and output · ${n} call${n === 1 ? '' : 's'}` : 'Inspect this step'}</button>
+    <div class="p-steps"><button class="btn" type="button" data-act="back"${i <= 0 ? ' disabled' : ''}>Back</button><button class="btn" type="button" data-act="next"${i >= run.steps.length - 1 ? ' disabled' : ''}>Next step</button></div>`;
+}
+
+// ---------- track ----------
+function buildTrack(run) {
+  const svg = $('#track-svg');
+  svg.innerHTML = '';
+  const X = (ms) => (ms / run.total) * 1000;
+  const lanes = { llm: [4, 14], step: [20, 30], data: [36, 44], cache: [48, 54] };
+  const colorOf = Object.fromEntries(LANES.map((l) => [l.id, l.color || 'data']));
+  for (const e of run.events) {
+    const lane = e.k === 'llm' ? 'llm' : e.k === 'cache' ? 'cache' : 'data';
+    const [y0, y1] = lanes[lane];
+    const color = e.k === 'llm' ? 'var(--model)' : e.k === 'cache' ? 'var(--cache)' : `var(--${colorOf[e.k] || 'data'})`;
+    el('rect', { x: X(e.a), y: y0, width: Math.max(1.6, X(e.b) - X(e.a)), height: y1 - y0, fill: color, rx: 1, opacity: 0.88 }, svg);
+  }
+  for (const s of run.steps) {
+    const k = kindOf(run, s);
+    const color = k === 'model' ? 'var(--model)' : k === 'data' ? 'var(--data)' : k === 'cut' ? 'var(--fail)' : 'var(--code)';
+    el('rect', { x: X(s.a), y: lanes.step[0], width: Math.max(2, X(s.b) - X(s.a)), height: 10, fill: color, opacity: 0.5 }, svg);
+    if (s.mark) el('rect', { x: X(s.a) - 1, y: 2, width: 2.4, height: 54, fill: 'var(--fail)' }, svg);
+  }
+  const every = run.total > 20000 ? 5000 : run.total > 9000 ? 2000 : 1000;
+  const marks = [];
+  for (let ms = 0; ms <= run.total; ms += every) marks.push(`<span>${ms / 1000}s</span>`);
+  $('#ticks').innerHTML = marks.join('');
+}
+
+// ---------- summary, findings, comparison, limits ----------
+function renderSummary() {
+  const run = S.run;
+  const ms = modelShare(run);
+  const cards = (run.summary || []).map((c, k) => `
+    <div class="s-card"><h3>${esc(c.h)}</h3>
+      ${c.chips && c.chips.length ? `<div class="chips">${chipsHtml(c.chips)}</div>` : ''}
+      ${c.items && c.items.length ? `<ul class="board-list">${c.items.map((b) => `<li><span>${esc(b.t)}${b.y != null ? `<span class="yr">${esc(b.y)}</span>` : ''}</span>${b.dots && b.dots.length ? `<span class="dots" title="${esc(b.dots.map(([n, v]) => n + ': ' + v).join(', '))}">${b.dots.map(([, v]) => `<i class="${['strong', 'partial', 'weak'].includes(v) ? v : ''}"></i>`).join('')}</span>` : ''}</li>`).join('')}</ul>` : ''}
+      ${c.text ? `<p class="reply">${esc(c.text)}</p>` : ''}
+      ${c.note ? `<p class="f-note">${esc(c.note)}</p>` : ''}
+      ${FLAGS[run.id] && (c.flag || (k === 0 && !(run.summary || []).some((x) => x.flag))) ? `<div class="flag">${esc(FLAGS[run.id])}</div>` : ''}
+    </div>`).join('');
+  const live = {};
+  for (const e of run.events) if (e.k !== 'llm' && e.k !== 'cache') live[e.k] = (live[e.k] || 0) + 1;
+  const cache = run.net.filter((c) => c.k === 'cache');
+  const timeouts = run.events.filter((e) => e.x === 'timeout').length;
+  $('#summary').innerHTML = cards + `
+    <div class="s-card"><h3>Spend</h3>
+      <div class="timebar" title="Share of wall time in model calls"><i style="width:${(ms * 100).toFixed(0)}%;background:var(--model)"></i><i style="flex:1;background:var(--code)"></i></div>
+      <dl class="spend">
+        <dt>Wall time</dt><dd>${sec(run.total)} · ${(ms * 100).toFixed(0)}% model</dd>
+        <dt>Model calls</dt><dd>${run.calls}</dd>
+        <dt>Tokens in</dt><dd>${fmt(run.tokens.in)} · ${Math.round(100 * run.tokens.cached / Math.max(1, run.tokens.in))}% cached</dd>
+        <dt>Tokens out</dt><dd>${fmt(run.tokens.out)}</dd>
+        ${cache.length ? `<dt>Cache reads</dt><dd>${fmt(cache.length)} · ${fmt(cache.filter((c) => c.hit).length)} hits</dd>` : ''}
+        ${Object.keys(live).length ? `<dt>Live calls</dt><dd>${Object.entries(live).map(([k, v]) => `${esc(((META.services || {})[k] || {}).name || k)} ${v}`).join(' · ')}${timeouts ? ` (${timeouts} timed out)` : ''}</dd>` : ''}
+      </dl></div>`;
+}
+function renderFinds() {
+  if (!FINDS.length) { $('#finds-sec').hidden = true; return; }
+  $('#finds').innerHTML = FINDS.map((f, k) => `
+    <article class="find">
+      <div class="find-top"><span class="find-tags"><span class="sev ${f.sev}">${esc(f.tag)}</span>${f.sev === 'good' ? '' : '<span class="status">Open</span>'}</span><span class="run-n">${esc((RUNS.find((r) => r.id === f.go[0]) || {}).title || '')}</span></div>
+      <h3>${esc(f.title)}</h3>
+      <p>${esc(f.body)}</p>
+      <p class="ev">${esc(f.ev)}</p>
+      <button class="btn" type="button" data-find="${k}">Show me<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </article>`).join('');
+  $('#finds').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-find]');
+    if (!b) return;
+    const [id, view, t] = FINDS[Number(b.dataset.find)].go;
+    selectRun(id, { t });
+    setView(view);
+    document.querySelector('.stage').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  });
+}
+function renderCompare() {
+  if (!COMPARE) return;
+  $('#cmp-sec').hidden = false;
+  if (COMPARE.title) $('#cmp-h').textContent = COMPARE.title;
+  $('#cmp-note').textContent = COMPARE.note || '';
+  const max = Math.max(...COMPARE.rows.flatMap((r) => [r.before.total, r.after.total]));
+  const k = (v) => `${(v / 1000).toFixed(1)}k`;
+  const cell = (x) => `<span class="cmp-n">${sec(x.total)}</span><span class="cmp-bar"><i style="width:${(100 * x.total / max).toFixed(1)}%"></i></span><span class="cmp-sub">${x.calls} calls · ${k(x.tin)} in${x.out ? ` · ${esc(x.out)}` : ''}${x.bad ? ` · <b class="bad">${esc(x.bad)}</b>` : ''}</span>`;
+  const sum = (side, f) => COMPARE.rows.reduce((a, r) => a + (r[side][f] || 0), 0);
+  $('#compare').innerHTML = `<thead><tr><th>Request</th><th>${esc(COMPARE.cols[0])}</th><th>${esc(COMPARE.cols[1])}</th><th>What changed</th></tr></thead>
+    <tbody>${COMPARE.rows.map((r) => `<tr><th scope="row">${esc(r.label)}<small>${esc(r.ask || '')}</small></th><td class="old">${cell(r.before)}</td><td class="new">${cell(r.after)}</td><td class="why">${esc(r.why || '')}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><th scope="row">All ${COMPARE.rows.length} together</th><td class="old"><span class="cmp-n">${sec(sum('before', 'total'))}</span><span class="cmp-sub">${sum('before', 'calls')} calls · ${k(sum('before', 'tin'))} in</span></td><td class="new"><span class="cmp-n">${sec(sum('after', 'total'))}</span><span class="cmp-sub">${sum('after', 'calls')} calls · ${k(sum('after', 'tin'))} in</span></td><td class="why">${esc(COMPARE.foot || '')}</td></tr></tfoot>`;
+  $('#changes').innerHTML = (COMPARE.changes || []).map((c) => `<article class="chg"><h3>${esc(c.h)}</h3><p>${esc(c.p)}</p>${c.code ? `<code>${esc(c.code)}</code>` : ''}</article>`).join('');
+}
+function renderLimits() {
+  if (!LIMITS || !LIMITS.length) return;
+  $('#lim-sec').hidden = false;
+  const show = (r, v) => (r.unit === 'ms' ? sec(v) : String(v));
+  $('#limits').innerHTML = LIMITS.map((r) => `
+    <div class="lim">
+      <div class="lim-n"><b>${esc(r.n)}</b><code>${esc(r.code)}</code></div>
+      <div class="lim-bar" aria-hidden="true"><span class="rail"></span><span class="cap"></span>${r.pts.filter(([, v]) => v != null).map(([id, v]) => `<span class="m${r.hitAt != null && v >= r.hitAt ? ' hit' : ''}" style="left:${Math.min(100, 100 * v / r.cap).toFixed(1)}%" title="${esc((RUNS.find((x) => x.id === id) || {}).title || id)}: ${esc(show(r, v))}"></span>`).join('')}</div>
+      <div class="lim-e">${esc(r.e)}</div>
+    </div>`).join('');
+}
+
+// ---------- inspector: what each step sent and what came back ----------
+// Every step opens here: a model call's parameters, instructions, input, response format and
+// answer; every outside request with a summary of its answer; cache reads; for code steps, what
+// code checked against. Opened from a box in the loop, a call in the sequence, or the panel.
+const JTYPE = (v) => (v === null ? 'null' : typeof v);
+function jtree(v, depth = 0) {
+  if (v === null || typeof v !== 'object') {
+    const s = typeof v === 'string' ? v : JSON.stringify(v);
+    return `<span class="j-v j-${JTYPE(v)}">${typeof v === 'string' ? '“' + esc(s) + '”' : esc(s)}</span>`;
+  }
+  const arr = Array.isArray(v);
+  const entries = arr ? v.map((x, i) => [i, x]) : Object.entries(v);
+  if (!entries.length) return `<span class="j-v">${arr ? '[ ]' : '{ }'}</span>`;
+  const label = arr ? `${entries.length} item${entries.length === 1 ? '' : 's'}` : `${entries.length} field${entries.length === 1 ? '' : 's'}`;
+  const peek = arr
+    ? entries.slice(0, 3).map(([, x]) => (x && typeof x === 'object' ? x.title || x.label || x.name || x.text || '' : String(x))).filter(Boolean).join(', ')
+    : entries.slice(0, 4).map(([k]) => k).join(', ');
+  const open = depth === 0 || (entries.length <= 3 && depth < 3) ? ' open' : '';
+  const kids = entries.map(([k, x]) => `<li><span class="j-k">${esc(k)}</span>${x && typeof x === 'object' ? ' ' : ': '}${jtree(x, depth + 1)}</li>`).join('');
+  return `<details class="j"${open}><summary><span class="j-n">${arr ? '[' : '{'} ${label} ${arr ? ']' : '}'}</span>${peek ? ` <span class="j-p">${esc(String(peek).slice(0, 90))}</span>` : ''}</summary><ul>${kids}</ul></details>`;
+}
+const sizeOf = (v) => { try { return JSON.stringify(v).length; } catch { return 0; } };
+const kb = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k chars` : `${n} chars`);
+function paramsTable(rows) {
+  const r = rows.filter(([, v]) => v !== undefined && v !== null && v !== '');
+  return `<table class="kv">${r.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${typeof v === 'string' ? esc(v) : esc(JSON.stringify(v))}</td></tr>`).join('')}</table>`;
+}
+const svcName = (k) => ((META.services || {})[k] || {}).name || k;
+function llmCard(c) {
+  const p = c.params || {};
+  const prompt = PROMPTS[c.prompt] || '';
+  const schema = SCHEMAS[c.schema];
+  const input = c.input;
+  const keys = input && typeof input === 'object' && !Array.isArray(input) ? Object.entries(input) : [];
+  const u = c.usage || {};
+  const rows = [
+    ['model', c.model], ['call', c.name], ['prompt version', c.pv], ['reasoning effort', p.reasoning && p.reasoning.effort],
+    ['max output tokens', p.max_output_tokens], ['temperature', p.temperature], ['stream', p.stream], ['store', p.store],
+    ['response format', p.format ? `${p.format.type || ''} · ${p.format.name || ''}${p.format.strict ? ' · strict' : ''}` : undefined],
+    ['tools', (c.tools || []).length ? c.tools.join(', ') : undefined], ['tool choice', p.tool_choice],
+    ...Object.entries(p.other || {}),
+  ];
+  return `
+    <article class="call llm">
+      <div class="flow"><span class="who code">${esc(META.app.name)}</span><span class="arrow"><i></i><b>${esc(c.name)}</b><small>${sec(c.a)} → ${sec(c.b)}${c.f ? ` · first token ${sec(c.f)}` : ''} · ${sec(c.b - c.a)}</small></span><span class="who model">${esc(svcName('llm'))}${c.model ? ' · ' + esc(c.model) : ''}</span></div>
+      <div class="io">
+        <section class="side req"><h4>Request <small>${kb(c.size || sizeOf(input))}</small></h4>
+          ${paramsTable(rows)}
+          ${prompt ? `<details class="blk"><summary>Instructions <small>${kb(prompt.length)} · the same for every call of this kind</small></summary><pre class="txt">${esc(prompt)}</pre></details>` : ''}
+          <div class="blk"><div class="blk-h">Input <small>${keys.length ? keys.map(([k, v]) => `${k} ${Array.isArray(v) ? v.length : ''}`.trim()).join(' · ') : kb(sizeOf(input))}</small></div>${jtree(input)}</div>
+          ${schema ? `<details class="blk"><summary>Response format <small>JSON schema · ${kb(sizeOf(schema))}</small></summary>${jtree(schema)}</details>` : ''}
+          <button class="btn sm" type="button" data-copy="${c.i}">Copy the request as JSON</button>
+        </section>
+        <section class="side res"><h4>Response <small>${esc(c.status || '')}</small></h4>
+          ${paramsTable([['input tokens', u.input], ['cached', u.cached], ['output tokens', u.output], ['reasoning tokens', u.reasoning]])}
+          ${(c.toolCalls || []).map((t) => `<div class="blk"><div class="blk-h">Tool call · ${esc(t.name)}</div>${jtree(t.args)}</div>`).join('')}
+          ${c.output !== undefined && c.output !== null ? `<div class="blk"><div class="blk-h">Answer</div>${typeof c.output === 'string' ? `<pre class="txt">${esc(c.output)}</pre>` : jtree(c.output)}</div>` : (c.toolCalls || []).length ? '' : '<p class="muted">No answer: the call was cut off.</p>'}
+        </section>
+      </div>
+    </article>`;
+}
+function httpCard(c) {
+  return `
+    <article class="call svc">
+      <div class="flow"><span class="who code">${esc(META.app.name)}</span><span class="arrow"><i></i><b>${esc(c.method || 'GET')} ${esc(c.path || '')}</b><small>${sec(c.a)} → ${sec(c.b)} · ${sec(c.b - c.a)}${c.error ? ` · ${esc(c.error)}` : ''}</small></span><span class="who data">${esc(svcName(c.k))}</span></div>
+      <div class="io">
+        <section class="side req"><h4>Request</h4>${paramsTable([['host', c.host], ['path', c.path]])}${c.params && Object.keys(c.params).length ? `<div class="blk"><div class="blk-h">Query</div>${jtree(c.params)}</div>` : ''}${c.sent ? `<div class="blk"><div class="blk-h">Body</div>${jtree(c.sent)}</div>` : ''}<p class="note">Keys travel in a header or are blanked here (•).</p></section>
+        <section class="side res"><h4>Response <small>${c.status ? 'HTTP ' + c.status : c.error ? 'no answer' : ''}</small></h4>${c.results ? `<div class="blk"><div class="blk-h">Results</div>${jtree(c.results)}</div>` : ''}${c.summary !== undefined && c.summary !== null ? `<div class="blk"><div class="blk-h">What came back (summary)</div>${jtree(c.summary)}</div>` : c.results ? '' : '<p class="muted">Nothing came back.</p>'}</section>
+      </div>
+    </article>`;
+}
+function cacheCard(list) {
+  const by = {};
+  for (const c of list) (by[c.s || 'cache'] ||= []).push(c);
+  return Object.entries(by).map(([svc, items]) => {
+    const hits = items.filter((c) => c.hit).length;
+    const row = (c) => {
+      const s = c.summary || {};
+      const what = s.title ? `${s.title}${s.year ? ' (' + s.year + ')' : ''}` : s.results ? `${(s.results || []).length} results` : s.name || '';
+      return `<details class="crow"><summary><span class="ck ${c.hit ? 'hit' : 'miss'}">${c.hit ? 'hit' : 'miss'}</span><code>${esc(c.asked || c.key)}</code><span class="cw">${esc(String(what))}</span></summary>${c.summary ? jtree(c.summary) : '<p class="muted">Not in the cache: a live request follows.</p>'}</details>`;
+    };
+    const first = items.slice(0, 30).map(row).join('');
+    const rest = items.slice(30).map(row).join('');
+    return `<article class="call cache">
+      <div class="flow"><span class="who code">${esc(META.app.name)}</span><span class="arrow"><i></i><b>${items.length} ${esc(svcName(svc))} cache read${items.length === 1 ? '' : 's'}</b><small>${hits} hit${hits === 1 ? '' : 's'}, before any live call</small></span><span class="who cache">Cache</span></div>
+      <div class="clist">${first}${rest ? `<details class="more"><summary>Show ${items.length - 30} more</summary>${rest}</details>` : ''}</div>
+    </article>`;
+  }).join('');
+}
+function contextCard(run, s) {
+  // Code steps: what code checked against, from this turn's context as the model received it.
+  const c = s.ctx_call != null ? run.net[s.ctx_call] : null;
+  const input = c && c.input && typeof c.input === 'object' ? c.input : null;
+  if (!input) return '';
+  const pick = {};
+  for (const k of META.contextKeys || []) if (input[k] !== undefined) pick[k] = input[k];
+  if (!Object.keys(pick).length) return '';
+  return `<article class="call ctx"><div class="blk"><div class="blk-h">What code checks against <small>as the ${esc(c.name)} call received it</small></div>${jtree(pick)}</div></article>`;
+}
+let inspIdx = -1;
+function openInspect(i, { focusCall } = {}) {
+  const run = S.run;
+  const s = run.steps[i];
+  if (!s) return;
+  inspIdx = i;
+  if (S.idx !== i) { pause(); seek(s.a); }
+  const kind = kindOf(run, s);
+  const calls = (s.calls || []).map((id) => run.net[id]).filter(Boolean);
+  const order = (a, b) => (focusCall != null ? (b.i === focusCall) - (a.i === focusCall) : 0) || a.a - b.a;
+  const llm = calls.filter((c) => c.k === 'llm').sort(order);
+  const http = calls.filter((c) => c.k !== 'llm' && c.k !== 'cache').sort(order);
+  const cache = calls.filter((c) => c.k === 'cache');
+  $('#insp-kind').className = `kind ${kind}`;
+  $('#insp-kind').textContent = KIND_LABEL[kind];
+  $('#insp-when').textContent = `step ${i + 1} of ${run.steps.length} · ${sec(s.a)}${s.b > s.a + 2 ? ` → ${sec(s.b)}` : ''}`;
+  $('#insp-h').textContent = s.title;
+  $('#insp-body').innerHTML = `
+    <div class="what">${s.meta ? `<p class="p-meta">${esc(s.meta)}</p>` : ''}${s.body ? `<p>${esc(s.body)}</p>` : ''}${s.chips && s.chips.length ? `<div class="chips">${chipsHtml(s.chips)}</div>` : ''}${s.ref ? `<p class="ref">${esc(s.ref)}</p>` : ''}</div>
+    ${calls.length ? '' : `<p class="none">No outside call in this step: the app’s own code does it.</p>`}
+    ${contextCard(run, s)}
+    ${llm.map(llmCard).join('')}
+    ${http.map(httpCard).join('')}
+    ${cache.length ? cacheCard(cache) : ''}`;
+  $('#insp-prev').disabled = i <= 0;
+  $('#insp-next').disabled = i >= run.steps.length - 1;
+  const d = $('#inspect');
+  if (!d.open) d.showModal();
+  $('#insp-body').scrollTop = 0;
+}
+function inspectFromCall(id) {
+  const run = S.run;
+  const k = run.steps.findIndex((s) => (s.calls || []).includes(id));
+  if (k >= 0) openInspect(k, { focusCall: id });
+}
+function initInspect() {
+  const d = $('#inspect');
+  $('#insp-x').addEventListener('click', () => d.close());
+  d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+  $('#insp-prev').addEventListener('click', () => openInspect(inspIdx - 1));
+  $('#insp-next').addEventListener('click', () => openInspect(inspIdx + 1));
+  $('#insp-body').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-copy]');
+    if (!b) return;
+    const c = S.run.net[Number(b.dataset.copy)];
+    const p = c.params || {};
+    const body = { model: c.model };
+    for (const k of ['reasoning', 'max_output_tokens', 'temperature', 'stream', 'store', 'tool_choice']) if (p[k] != null) body[k] = p[k];
+    Object.assign(body, p.other || {}, { instructions: PROMPTS[c.prompt], input: c.input });
+    if (p.format) body.text = { format: { ...p.format, schema: SCHEMAS[c.schema] } };
+    try { await navigator.clipboard.writeText(JSON.stringify(body, null, 2)); b.textContent = 'Copied'; } catch { b.textContent = 'Copy is blocked here'; }
+  });
+}
+
+// ---------- control ----------
+function syncHash() { try { history.replaceState(null, '', '#' + S.run.id); } catch {} }
+function selectRun(id, { t = 'end' } = {}) {
+  const run = RUNS.find((r) => r.id === id) || RUNS[0];
+  pause();
+  S.run = run;
+  for (const b of document.querySelectorAll('.run')) b.setAttribute('aria-pressed', String(b.dataset.run === run.id));
+  buildLoop(run);
+  buildSeq(run);
+  buildTrack(run);
+  $('#clock-total').textContent = sec(run.total);
+  funnelKey = '';
+  renderSummary();
+  store.set('replay-run', run.id);
+  syncHash();
+  seek(t === 'end' ? run.total : t, true);
+}
+function setView(v) {
+  S.view = v;
+  for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', String(b.dataset.view === v));
+  for (const id of ['loop', 'seq', 'funnel']) $('#view-' + id).hidden = id !== v;
+  store.set('replay-view', v);
+  render(true);
+}
+function seek(t, force) {
+  const run = S.run;
+  S.t = Math.max(0, Math.min(run.total, t));
+  const before = S.idx;
+  S.idx = stepAt(run, S.t);
+  render(force || before !== S.idx, before);
+}
+function render(changed, before) {
+  const run = S.run;
+  const pct = (100 * S.t / run.total);
+  $('#playhead').style.left = `calc(${pct}% - 1px)`;
+  $('#track').setAttribute('aria-valuenow', pct.toFixed(0));
+  $('#track').setAttribute('aria-valuetext', `${sec(S.t)} of ${sec(run.total)}`);
+  $('#clock-t').textContent = sec(S.t);
+  $('#clock-step').textContent = `step ${S.idx + 1} of ${run.steps.length}`;
+  updateSeq();
+  if (changed) {
+    const last = updateLoop();
+    if (before !== undefined && S.idx === before + 1) animateToken(last);
+    renderPanel();
+  }
+  if (S.view === 'funnel') renderFunnel(changed === true && before === undefined);
+  $('#back').disabled = S.idx < 0;
+  $('#next').disabled = S.idx >= run.steps.length - 1 && S.t >= run.total;
+}
+let raf = 0, lastNow = 0;
+function tick(now) {
+  if (!S.playing) return;
+  const dt = Math.min(80, now - lastNow);
+  lastNow = now;
+  seek(S.t + dt * S.speed);
+  if (S.t >= S.run.total) { pause(); return; }
+  raf = requestAnimationFrame(tick);
+}
+function play() {
+  if (S.t >= S.run.total) seek(0, true);
+  S.playing = true;
+  $('#play-lab').textContent = 'Pause';
+  $('#play-ico').innerHTML = '<path d="M3 1.8h2.2v8.4H3zM6.8 1.8H9v8.4H6.8z" fill="currentColor"/>';
+  lastNow = performance.now();
+  raf = requestAnimationFrame(tick);
+}
+function pause() {
+  S.playing = false;
+  cancelAnimationFrame(raf);
+  $('#play-lab').textContent = S.t >= S.run.total ? 'Replay' : 'Play';
+  $('#play-ico').innerHTML = '<path d="M3 1.6v8.8L10.4 6z" fill="currentColor"/>';
+}
+function stepBy(d) {
+  pause();
+  const run = S.run;
+  if (d > 0) {
+    const k = S.idx + 1;
+    if (k < run.steps.length) seek(run.steps[k].a); else seek(run.total);
+  } else {
+    const cur = run.steps[S.idx];
+    if (cur && S.t > cur.a + 1 && S.idx === run.steps.length - 1 && S.t >= run.total) seek(cur.a);
+    else if (S.idx - 1 >= 0) seek(run.steps[S.idx - 1].a);
+    else seek(0);
+  }
+}
+function renderHeader() {
+  $('#eyebrow').innerHTML = (META.eyebrow || []).map((x) => `<span>${esc(x)}</span>`).join('');
+  $('#page-h').textContent = META.title || 'Workflow Replay';
+  $('#thesis').innerHTML = esc(META.thesis || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  if (META.findsNote) $('#finds-note').textContent = META.findsNote;
+  const totals = RUNS.reduce((a, r) => ({ in: a.in + r.tokens.in, c: a.c + r.tokens.cached, out: a.out + r.tokens.out, calls: a.calls + r.calls }), { in: 0, c: 0, out: 0, calls: 0 });
+  $('#foot').innerHTML = `<h3>How this was recorded</h3>${(META.recorded || []).map((p) => `<p>${esc(p)}</p>`).join('')}
+    <p>Across the ${RUNS.length} runs: ${totals.calls} model calls, ${fmt(totals.in)} input tokens (${Math.round(100 * totals.c / Math.max(1, totals.in))}% cached) and ${fmt(totals.out)} output tokens.</p>
+    <p>Each step opens a pop-up with what it sent and what came back. For a model call: the parameters, the instructions, the full input, the response format and the answer. For other services: every request with a summary of its answer. API keys travel in request headers and are never recorded.</p>`;
+}
+
+function init() {
+  renderHeader();
+  renderRuns();
+  renderFinds();
+  renderCompare();
+  renderLimits();
+  $('#play').addEventListener('click', () => (S.playing ? pause() : play()));
+  $('#back').addEventListener('click', () => stepBy(-1));
+  $('#next').addEventListener('click', () => stepBy(1));
+  $('#panel').addEventListener('click', (e) => {
+    const ins = e.target.closest('[data-inspect]');
+    if (ins) return openInspect(Number(ins.dataset.inspect));
+    const b = e.target.closest('[data-act]');
+    if (b) stepBy(b.dataset.act === 'next' ? 1 : -1);
+  });
+  $('#seq').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-call]');
+    if (b && b.dataset.call !== '') inspectFromCall(Number(b.dataset.call));
+  });
+  initInspect();
+  for (const b of document.querySelectorAll('.speed button')) b.addEventListener('click', () => {
+    S.speed = Number(b.dataset.speed);
+    for (const x of document.querySelectorAll('.speed button')) x.setAttribute('aria-pressed', String(x === b));
+  });
+  for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => setView(b.dataset.view));
+  const track = $('#track');
+  const seekFrom = (e) => { const r = track.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * S.run.total); };
+  let dragging = false;
+  track.addEventListener('pointerdown', (e) => { pause(); dragging = true; track.setPointerCapture(e.pointerId); seekFrom(e); });
+  track.addEventListener('pointermove', (e) => { if (dragging) seekFrom(e); });
+  track.addEventListener('pointerup', () => { dragging = false; });
+  track.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); stepBy(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepBy(-1); }
+  });
+  // Keys work inside the replay only, never while a field or the pop-up has focus.
+  $('.stage').addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea, select, dialog')) return;
+    if (e.key === ' ' && !e.target.closest('button, [role="slider"], .node')) { e.preventDefault(); S.playing ? pause() : play(); }
+    else if (e.key === 'ArrowRight' && !e.target.closest('[role="slider"]')) stepBy(1);
+    else if (e.key === 'ArrowLeft' && !e.target.closest('[role="slider"]')) stepBy(-1);
+    else if (e.key === '1') setView('loop');
+    else if (e.key === '2') setView('seq');
+    else if (e.key === '3') setView('funnel');
+  });
+  const fromHash = (location.hash || '').slice(1);
+  const startRun = RUNS.some((r) => r.id === fromHash) ? fromHash : store.get('replay-run') || RUNS[0].id;
+  const v = store.get('replay-view');
+  selectRun(RUNS.some((r) => r.id === startRun) ? startRun : RUNS[0].id);
+  if (v && ['loop', 'seq', 'funnel'].includes(v)) setView(v);
+  // The verifier's hook: only on a local file, never on the published page.
+  if (location.protocol === 'file:') window.__replay = { RUNS, FLOWS, FINDS, META, S, selectRun, setView, seek, openInspect, inspectFromCall, stepBy, alias };
+}
+init();
+</script>

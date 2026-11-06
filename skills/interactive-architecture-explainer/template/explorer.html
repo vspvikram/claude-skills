@@ -1,0 +1,1207 @@
+<title>Checkout system map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* ==========================================================================
+   Interactive architecture explainer: template (example system: order checkout)
+   REPLACE: the <title>, the header copy, the DATA block in the script, and the
+   example sections under the explorer. Keep the element ids: scripts/verify.mjs
+   and the engine use them.
+   Layout: short summary, one wide explorer (diagram + side panel), a few compact
+   visuals, decisions, then a quiet appendix for builders.
+   Diagram grammar: live work on top, shared stores in the middle band, work
+   nobody waits for below, outside services on the right. Color marks the region.
+   Theme: dark first, light values follow the viewer's theme. For a dark-only page
+   (only when the user asks for one), delete the two light blocks.
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #0d1014; --surface: #13171c; --surface-2: #1a1f26; --raised: #212831;
+  --line: #29313b; --line-strong: #3b4550;
+  --text: #e6eaef; --muted: #a3adb9; --faint: #737e8b;
+  --accent: #eef3fb; --accent-glow: #eef3fb33; --on-accent: #0d1014; --trail: #8793a3;
+  --edge: #353f4a; --edge-arrow: #4a5562; --edge-hover: #9aa5b3;
+  --node-fill: #1a2028; --node-line: #343d48; --store-fill: #1c232b; --store-lid: #252d37;
+  --st-built: #a3adba; --st-changing: #e2b263; --st-new: #79cf9d;
+  --lane-live: #111b26; --lane-live-line: #1f3247; --lane-live-ink: #a2c2ea;
+  --lane-bg: #19172a; --lane-bg-line: #2e2a4a; --lane-bg-ink: #b9abee;
+  --lane-later: #211720; --lane-later-line: #3d2836; --lane-later-ink: #e6a8c0;
+  --lane-demand: #0f201f; --lane-demand-line: #1e3d39; --lane-demand-ink: #8fd0c7;
+  --band: #161a1f; --band-line: #2d353f; --band-ink: #d0d6de;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f5f6f8; --surface: #ffffff; --surface-2: #eff1f4; --raised: #e6e9ee;
+    --line: #dde1e7; --line-strong: #c2c8d1;
+    --text: #141a21; --muted: #4f5966; --faint: #636d7a;
+    --accent: #141a21; --accent-glow: #141a2126; --on-accent: #ffffff; --trail: #7b8594;
+    --edge: #c2c9d2; --edge-arrow: #a1aab6; --edge-hover: #5a6471;
+    --node-fill: #ffffff; --node-line: #c6ccd5; --store-fill: #fbfcfd; --store-lid: #edf0f4;
+    --st-built: #7b8594; --st-changing: #9b6413; --st-new: #25804f;
+    --lane-live: #edf3fb; --lane-live-line: #cddcf0; --lane-live-ink: #2d5c96;
+    --lane-bg: #f2f0fb; --lane-bg-line: #dbd5f2; --lane-bg-ink: #5a4aa8;
+    --lane-later: #fbf0f4; --lane-later-line: #eed2de; --lane-later-ink: #9c3d66;
+    --lane-demand: #ecf7f4; --lane-demand-line: #c8e5de; --lane-demand-ink: #1d7466;
+    --band: #f3f4f6; --band-line: #dcdfe4; --band-ink: #37404b;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #eff1f4; --raised: #e6e9ee;
+  --line: #dde1e7; --line-strong: #c2c8d1;
+  --text: #141a21; --muted: #4f5966; --faint: #636d7a;
+  --accent: #141a21; --accent-glow: #141a2126; --on-accent: #ffffff; --trail: #7b8594;
+  --edge: #c2c9d2; --edge-arrow: #a1aab6; --edge-hover: #5a6471;
+  --node-fill: #ffffff; --node-line: #c6ccd5; --store-fill: #fbfcfd; --store-lid: #edf0f4;
+  --st-built: #7b8594; --st-changing: #9b6413; --st-new: #25804f;
+  --lane-live: #edf3fb; --lane-live-line: #cddcf0; --lane-live-ink: #2d5c96;
+  --lane-bg: #f2f0fb; --lane-bg-line: #dbd5f2; --lane-bg-ink: #5a4aa8;
+  --lane-later: #fbf0f4; --lane-later-line: #eed2de; --lane-later-ink: #9c3d66;
+  --lane-demand: #ecf7f4; --lane-demand-line: #c8e5de; --lane-demand-ink: #1d7466;
+  --band: #f3f4f6; --band-line: #dcdfe4; --band-ink: #37404b;
+}
+
+body { background: var(--bg); color: var(--text); font: 400 15px/1.55 var(--font-sans); margin: 0; padding-inline: max(16px, 2.2vw); padding-block: 44px 96px; -webkit-font-smoothing: antialiased; }
+.page { max-width: 1400px; margin-inline: auto; display: grid; gap: 80px; }
+.page > *, .top > *, .explorer > *, .ex-body > *, .panel > *, .pv > *, .sec > *, .dec > * { min-width: 0; }
+[hidden] { display: none !important; } /* the publish skeleton has this too; kept so the raw file also works */
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+h1 { font-size: clamp(1.9rem, 3vw, 2.5rem); line-height: 1.1; letter-spacing: -0.025em; }
+h2 { font-size: 1.35rem; line-height: 1.25; letter-spacing: -0.015em; }
+h3 { font-size: 1rem; line-height: 1.35; }
+p { margin: 0; }
+a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+code { font-family: var(--font-mono); font-size: .86em; }
+.note { font-size: .82rem; color: var(--faint); }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.st { width: 11px; height: 11px; flex: none; }
+.st-built { color: var(--st-built); } .st-changing { color: var(--st-changing); } .st-new { color: var(--st-new); }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
+
+/* Header */
+.top { display: grid; gap: 18px; max-width: 76ch; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: .85rem; color: var(--muted); }
+.meta .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--faint); }
+.summary { font-size: 1.08rem; line-height: 1.6; }
+.jump { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 7px 12px 7px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: .88rem; font-weight: 500; text-decoration: none; background: var(--surface); }
+.jump:hover { border-color: var(--trail); }
+.jump .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-changing); }
+
+/* Explorer */
+.explorer, .ex-head { display: grid; gap: 16px; }
+.ex-title { display: grid; gap: 4px; }
+.ex-title p { color: var(--muted); font-size: .92rem; }
+.scenarios { display: flex; flex-wrap: wrap; gap: 8px; }
+.sc { display: grid; gap: 1px; text-align: left; padding: 8px 13px 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; transition: background .15s, border-color .15s; }
+.sc:hover { border-color: var(--line-strong); background: var(--raised); }
+.sc-name { font-size: .9rem; font-weight: 500; }
+.sc-lane { font-size: .74rem; color: var(--muted); }
+.sc[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.sc[aria-pressed="true"] .sc-lane { color: var(--on-accent); opacity: .7; }
+.ex-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; }
+.diagram { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 10px 10px 12px; display: grid; gap: 10px; align-content: start; }
+.diagram-scroll { overflow-x: auto; }
+#arch { display: block; width: 100%; height: auto; min-width: 820px; font-family: var(--font-sans); }
+.diagram figcaption { font-size: .84rem; color: var(--muted); padding-inline: 4px; }
+
+/* SVG regions. Each region id sets its three lane tokens; add a rule per new kind of work. */
+.region { transition: opacity .25s; }
+.region rect { fill: var(--r-fill); stroke: var(--r-line); stroke-width: 1; }
+.r-name { fill: var(--r-ink); font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.r-when { fill: var(--muted); font-size: 12px; }
+.r-cap { fill: var(--faint); font-size: 11px; }
+.rg-live { --r-fill: var(--lane-live); --r-line: var(--lane-live-line); --r-ink: var(--lane-live-ink); }
+.rg-bg { --r-fill: var(--lane-bg); --r-line: var(--lane-bg-line); --r-ink: var(--lane-bg-ink); }
+.rg-later { --r-fill: var(--lane-later); --r-line: var(--lane-later-line); --r-ink: var(--lane-later-ink); }
+.rg-demand { --r-fill: var(--lane-demand); --r-line: var(--lane-demand-line); --r-ink: var(--lane-demand-ink); }
+.rg-band { --r-fill: var(--band); --r-line: var(--band-line); --r-ink: var(--band-ink); }
+.rg-outside { --r-fill: var(--bg); --r-line: var(--line-strong); --r-ink: var(--muted); }
+.rg-outside rect { stroke-dasharray: 4 4; }
+
+/* SVG boxes */
+.node { cursor: pointer; outline: none; transition: opacity .25s; }
+.node .box { fill: var(--node-fill); stroke: var(--node-line); stroke-width: 1; transition: stroke .2s; }
+.k-store .box { fill: var(--store-fill); }
+.k-store .lid { fill: var(--store-lid); stroke: var(--node-line); stroke-width: 1; transition: stroke .2s; }
+.k-ext .box { fill: var(--surface); stroke: var(--line-strong); stroke-dasharray: 3 3; }
+.node .ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; }
+.node:focus-visible .ring { opacity: 1; }
+.n-title { fill: var(--text); font-size: 14px; font-weight: 600; }
+.k-store .n-title { font-size: 13.5px; }
+.n-sub { fill: var(--muted); font-size: 11.5px; }
+.node:hover .box, .node:hover .lid { stroke: var(--edge-hover); }
+.sm { stroke-width: 1.4; }
+.sm-built { fill: var(--st-built); }
+.sm-new { fill: var(--st-new); }
+.sm-changing { fill: none; stroke: var(--st-changing); }
+.sm-half { fill: var(--st-changing); }
+
+/* SVG lines: solid = the caller waits, dashed = runs on its own */
+.edge { transition: opacity .25s; }
+.edge .line { fill: none; stroke: var(--edge); stroke-width: 1.25; transition: stroke .2s; }
+.edge.async .line { stroke-dasharray: 4 4; }
+.edge .hit { fill: none; stroke: var(--edge); stroke-opacity: 0; stroke-width: 12; pointer-events: stroke; cursor: help; }
+.mk-rest { fill: var(--edge-arrow); } .mk-hover { fill: var(--edge-hover); } .mk-cur { fill: var(--accent); } .mk-vis { fill: var(--trail); }
+.edge.is-hover .line, .edge.is-related .line { stroke: var(--edge-hover); }
+.edge.is-current .line { stroke: var(--accent); stroke-width: 2; }
+.edge.is-visited .line { stroke: var(--trail); stroke-width: 1.5; }
+.edge.is-pending { opacity: .45; }
+.edge.is-dim { opacity: .1; }
+.edge.is-faded { opacity: .3; }
+.node.is-dim { opacity: .26; }
+.node.is-pending { opacity: .6; }
+.node.is-current .box, .node.is-current .lid, .node.is-selected .box, .node.is-selected .lid { stroke: var(--accent); stroke-width: 1.8; }
+.node.is-visited .box, .node.is-visited .lid { stroke: var(--trail); }
+.region.is-dim { opacity: .5; }
+
+/* SVG labels, number badges, travelling token */
+.labels, .tokens { pointer-events: none; }
+.pill { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; }
+.pill.cur { fill: var(--raised); stroke: var(--accent); }
+.pill-text { fill: var(--text); font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; }
+.badge { fill: var(--accent); }
+.badge.vis { fill: var(--trail); }
+.badge-num { fill: var(--on-accent); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.token { fill: var(--accent); }
+.token-halo { fill: var(--accent-glow); }
+
+/* Side panel */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 18px; display: grid; gap: 16px; align-content: start; }
+.player { display: flex; align-items: center; gap: 5px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.ctl { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 8px; white-space: nowrap; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); font-size: .82rem; font-weight: 500; cursor: pointer; }
+.ctl svg { width: 12px; height: 12px; }
+.ctl:hover:not(:disabled) { border-color: var(--line-strong); background: var(--raised); }
+.ctl:disabled { opacity: .4; cursor: default; }
+.ctl.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); min-width: 80px; }
+.ctl.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(.94); }
+.ctl.reset { margin-left: auto; }
+.pv { display: grid; gap: 14px; }
+.pv-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: .78rem; color: var(--muted); }
+.count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.scn-title { font-size: .82rem; color: var(--muted); margin-top: -8px; }
+.lane-tag { display: inline-flex; align-items: center; gap: 6px; }
+.lane-tag::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--lane-c, var(--faint)); }
+.lt-live { --lane-c: var(--lane-live-ink); } .lt-bg { --lane-c: var(--lane-bg-ink); } .lt-later { --lane-c: var(--lane-later-ink); }
+.lt-demand { --lane-c: var(--lane-demand-ink); } .lt-band { --lane-c: var(--band-ink); } .lt-outside { --lane-c: var(--faint); }
+.pv h3 { font-size: 1.05rem; }
+.pv-text { font-size: .93rem; }
+.io { display: flex; flex-wrap: wrap; gap: 6px; }
+.io > span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); font-size: .8rem; }
+.io b { font-weight: 500; color: var(--muted); }
+.io i { font-style: normal; }
+.io svg { width: 12px; height: 12px; color: var(--band-ink); flex: none; }
+.ex { font-size: .86rem; padding: 9px 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); }
+.ex::before { content: "Example"; display: block; font-size: .7rem; letter-spacing: .04em; color: var(--faint); margin-bottom: 2px; }
+.pv-note { font-size: .8rem; color: var(--muted); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.steps button { width: 100%; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: center; text-align: left; padding: 5px 6px; border: 0; border-radius: 7px; background: none; font-size: .83rem; color: var(--muted); cursor: pointer; }
+.steps button:hover { background: var(--surface-2); color: var(--text); }
+.steps .n { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: .68rem; font-weight: 700; border: 1px solid var(--line-strong); font-variant-numeric: tabular-nums; }
+.steps .done .n { background: var(--trail); border-color: var(--trail); color: var(--on-accent); }
+.steps [aria-current="step"] { color: var(--text); background: var(--surface-2); }
+.steps [aria-current="step"] .n { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.legend { display: grid; gap: 10px; font-size: .84rem; color: var(--muted); }
+.legend div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.lg-line { stroke: var(--edge-hover); stroke-width: 1.5; fill: none; }
+.lg-line.dash { stroke-dasharray: 4 3; }
+.lg-store { fill: var(--store-fill); stroke: var(--edge-hover); }
+.lg-ext { fill: none; stroke: var(--edge-hover); stroke-dasharray: 2.5 2; }
+.keys { font-size: .78rem; color: var(--faint); padding-top: 12px; border-top: 1px solid var(--line); }
+kbd { font-family: var(--font-mono); font-size: .74rem; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); }
+.nd { margin: 0; display: grid; gap: 12px; }
+.nd div { display: grid; gap: 2px; }
+.nd dt { font-size: .74rem; color: var(--faint); }
+.nd dd { margin: 0; font-size: .88rem; }
+.nd .ex::before { content: none; }
+.code-name { font-family: var(--font-mono); font-size: .74rem; color: var(--faint); }
+.pv-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.linkbtn { border: 0; background: none; padding: 0; font-size: .84rem; color: var(--muted); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; cursor: pointer; }
+.linkbtn:hover { color: var(--text); }
+
+/* Sections under the explorer */
+.sec { display: grid; gap: 22px; }
+.sec-head { display: grid; gap: 6px; max-width: 76ch; }
+.sec-head p { color: var(--muted); font-size: .94rem; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.hscroll { overflow-x: auto; }
+
+/* Funnel drawn as rows: what goes in, what stops and why, what comes out */
+.funnel { padding: 18px 20px 14px; }
+.f-grid { display: grid; grid-template-columns: minmax(14rem, auto) minmax(16rem, 1fr) minmax(16rem, 1.4fr); min-width: 760px; }
+.f-head, .f-row { display: contents; }
+.f-head > div { display: flex; align-items: baseline; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.f-head b { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.f-head span { font-size: .82rem; color: var(--muted); }
+.f-row > div { display: flex; align-items: center; gap: 8px; min-height: 38px; min-width: 0; font-size: .86rem; }
+.f-row.gap > div { border-top: 1px dashed var(--line); }
+.f-item { padding-right: 14px; }
+.f-item b { font-weight: 500; white-space: nowrap; }
+.src { font-size: .72rem; color: var(--muted); padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line); white-space: nowrap; }
+.f-line { height: 1.5px; flex: 0 0 18px; background: var(--line-strong); }
+.f-row.in .f-line { background: var(--accent); }
+.f-row.in .f-mid .f-line { flex: 1; }
+.f-x { width: 12px; height: 12px; color: var(--faint); flex: none; }
+.f-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 4px var(--accent-glow); }
+.f-why { color: var(--muted); white-space: nowrap; }
+.f-aside { font-size: .76rem; color: var(--faint); white-space: nowrap; }
+
+/* Tap-to-explain chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-2); font-size: .86rem; cursor: pointer; }
+.chip:hover { border-color: var(--trail); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip-detail { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 12px 16px; font-size: .93rem; }
+.chip-detail b { font-weight: 600; }
+
+/* Who-sees-what matrix */
+.matrix { padding: 6px 8px 8px; }
+.mx { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 0; font-size: .85rem; }
+.mx th, .mx td { padding: 9px 12px; text-align: left; vertical-align: middle; }
+.mx thead th { font-weight: 600; padding-top: 14px; border-bottom: 1px solid var(--line); }
+.mx thead small { display: block; font-size: .75rem; font-weight: 400; color: var(--muted); }
+.mx tbody th { font-weight: 500; color: var(--muted); white-space: nowrap; }
+.mx tbody tr + tr > * { border-top: 1px solid var(--line); }
+.yes, .no, .part { display: inline-flex; align-items: center; gap: 6px; }
+.yes svg, .no svg, .part svg { width: 13px; height: 13px; flex: none; }
+.yes svg { color: var(--st-new); }
+.no { color: var(--faint); }
+.part svg { color: var(--st-changing); }
+
+/* Decisions: open ones as cards with options, settled ones as quiet rows */
+.decs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 16px; align-items: start; }
+.dec { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 16px; padding: 18px 20px 20px; display: grid; gap: 14px; }
+.dec-top { display: flex; align-items: center; gap: 10px; }
+.dec-id { font-family: var(--font-mono); font-size: .8rem; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: var(--raised); color: var(--text); }
+.need { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--st-changing); }
+.need::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--st-changing); }
+.dec h3 { font-size: 1.1rem; }
+.dec p { font-size: .92rem; max-width: 70ch; }
+.opts { display: grid; gap: 8px; }
+.opt { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); font-size: .9rem; }
+.opt.rec { background: var(--surface-2); border-color: var(--trail); }
+.opt .l { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: .78rem; font-weight: 600; border: 1px solid var(--line-strong); }
+.opt.rec .l { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.rec-tag { font-size: .74rem; font-weight: 500; color: var(--st-new); margin-left: 6px; white-space: nowrap; }
+.reply { font-size: .85rem; color: var(--muted); padding-top: 12px; border-top: 1px solid var(--line); }
+.reply b { color: var(--text); font-weight: 500; }
+.settled { border-top: 1px solid var(--line); }
+.set-row { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.set-row > * { min-width: 0; }
+.set-id { display: flex; align-items: center; gap: 8px; align-self: start; font-size: .8rem; color: var(--st-new); }
+.set-row h3 { font-size: .96rem; }
+.set-row p { font-size: .88rem; color: var(--muted); margin-top: 4px; }
+
+/* Appendix for builders: muted on purpose */
+.appendix { color: var(--muted); font-size: .84rem; gap: 18px; padding-top: 28px; border-top: 1px solid var(--line); }
+.appendix h2 { font-size: 1rem; color: var(--muted); }
+.appendix .sec-head p { font-size: .84rem; color: var(--faint); }
+.ap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 24px 36px; }
+.ap-grid > div { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.ap-grid h3 { font-size: .84rem; color: var(--muted); }
+.ap-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.ap-table th, .ap-table td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); }
+.ap-table th { font-weight: 500; color: var(--faint); }
+.ap-table td:first-child { white-space: nowrap; }
+.ap-table code, .ap-list code { color: var(--text); }
+.ap-list { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; font-size: .8rem; }
+
+@media (max-width: 1400px) { .ex-body { grid-template-columns: minmax(0, 1fr) 320px; } }
+@media (max-width: 1100px) { .ex-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  body { font-size: 14.5px; padding-block: 28px 64px; }
+  .page { gap: 56px; }
+  .set-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+</style>
+
+<!-- Icon sprite: status glyphs and matrix marks, used with <use href="#…">. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-built" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="currentColor"/></symbol>
+  <symbol id="i-changing" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 1.7a4.3 4.3 0 0 1 0 8.6z" fill="currentColor"/></symbol>
+  <symbol id="i-new" viewBox="0 0 12 12"><path d="M6 .8 11.2 6 6 11.2.8 6z" fill="currentColor"/></symbol>
+  <symbol id="i-store" viewBox="0 0 12 12"><path d="M1.5 2.8a4.5 1.6 0 0 1 9 0v6.4a4.5 1.6 0 0 1-9 0z" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M1.5 2.8a4.5 1.6 0 0 0 9 0" fill="none" stroke="currentColor" stroke-width="1.1"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 12 12"><rect x="1.5" y="2" width="9" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.5"/></symbol>
+  <symbol id="i-yes" viewBox="0 0 13 13"><path d="M2.5 7l3 3 5-6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-no" viewBox="0 0 13 13"><path d="M3.5 3.5l6 6M9.5 3.5l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-part" viewBox="0 0 13 13"><circle cx="6.5" cy="6.5" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 1.9a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/></symbol>
+</svg>
+
+<div class="page">
+
+<!-- HEADER. Replace the meta line (system, what this page is, date), the name, and a 2–3 sentence
+     summary with the main idea in the reader's words. Keep the jump-link count equal to open decisions. -->
+<header class="top">
+  <div class="meta"><span>Shop</span><span class="sep"></span><span>Proposed checkout, for review</span><span class="sep"></span><span>28 Sep 2026</span></div>
+  <h1>Checkout system map</h1>
+  <p class="summary">Today, checkout reserves stock and emails the receipt while the shopper waits. In this proposal the shopper waits only for the card charge: checkout saves the order and leaves a job in a queue, and a background worker does the rest. The order page reads what the worker writes, so no screen waits on the slow parts.</p>
+  <a class="jump" href="#decisions"><span class="dot"></span>1 decision needs you</a>
+</header>
+
+<!-- EXPLORER. The scenario buttons, diagram and panel content are built from the DATA block in the script. -->
+<section class="explorer" id="explorer" aria-labelledby="explorer-h">
+  <div class="ex-head">
+    <div class="ex-title">
+      <h2 id="explorer-h">How the pieces talk</h2>
+      <p>Pick a scenario to follow it step by step, or click any box.</p>
+    </div>
+    <div class="scenarios" id="scenarios" role="group" aria-label="Scenarios"></div>
+  </div>
+
+  <div class="ex-body">
+    <figure class="diagram">
+      <div class="diagram-scroll">
+        <svg id="arch" role="group" aria-labelledby="arch-title arch-desc">
+          <title id="arch-title">Checkout architecture</title>
+          <desc id="arch-desc">The shopper's screens sit on top, shared stores in the middle, background and later work below, and outside services on the right. Every hand-off between kinds of work goes through a store.</desc>
+          <defs>
+            <marker id="mk-rest" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk-rest" d="M0,1 L10,5 L0,9 Z"/></marker>
+            <marker id="mk-hover" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk-hover" d="M0,1 L10,5 L0,9 Z"/></marker>
+            <marker id="mk-cur" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk-cur" d="M0,1 L10,5 L0,9 Z"/></marker>
+            <marker id="mk-vis" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk-vis" d="M0,1 L10,5 L0,9 Z"/></marker>
+          </defs>
+          <g id="g-regions"></g>
+          <g id="g-edges"></g>
+          <g id="g-nodes"></g>
+          <g id="g-labels" class="labels"></g>
+          <g id="g-tokens" class="tokens"></g>
+        </svg>
+      </div>
+      <figcaption>The kinds of work never call each other directly. They hand off through the shared stores in the middle band. Hover a line to see what moves along it.</figcaption>
+    </figure>
+
+    <aside class="panel" aria-label="Details">
+      <div class="player" role="group" aria-label="Scenario controls">
+        <button type="button" class="ctl" id="btn-back" aria-label="Back one step" disabled><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 2 3.5 6l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Back</button>
+        <button type="button" class="ctl primary" id="btn-play"><svg viewBox="0 0 12 12" aria-hidden="true" id="play-icon"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg><span id="play-label">Play</span></button>
+        <button type="button" class="ctl" id="btn-next" aria-label="Next step" disabled>Next<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="ctl reset" id="btn-reset" disabled>Reset</button>
+      </div>
+
+      <div class="pv" id="pv-rest">
+        <div class="pv-kicker">Overview</div>
+        <h3>Pick a scenario</h3>
+        <p class="pv-text">Each scenario lights up one path through the system, one numbered step at a time. Click any box to see what it is and who can see it.</p>
+        <div class="legend" aria-label="Legend">
+          <div>
+            <span><svg class="st st-built" aria-hidden="true"><use href="#i-built"/></svg>Built</span>
+            <span><svg class="st st-changing" aria-hidden="true"><use href="#i-changing"/></svg>Changing</span>
+            <span><svg class="st st-new" aria-hidden="true"><use href="#i-new"/></svg>New</span>
+          </div>
+          <div>
+            <span><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><path class="lg-line" d="M1 5h24"/></svg>someone is waiting</span>
+            <span><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><path class="lg-line dash" d="M1 5h24"/></svg>runs on its own</span>
+          </div>
+          <div>
+            <span><svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true"><path class="lg-store" d="M1.5 3.5a7.5 2.5 0 0 1 15 0v9a7.5 2.5 0 0 1-15 0z"/><path class="lg-store" d="M1.5 3.5a7.5 2.5 0 0 0 15 0"/></svg>shared store</span>
+            <span><svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true"><rect class="lg-ext" x="1.5" y="2.5" width="15" height="11" rx="3"/></svg>outside service</span>
+          </div>
+        </div>
+        <p class="keys">Keyboard: <kbd>Tab</kbd> to any box, <kbd>←</kbd> <kbd>→</kbd> to step through a scenario, <kbd>Esc</kbd> to reset.</p>
+      </div>
+
+      <div class="pv" id="pv-step" hidden>
+        <div class="pv-kicker"><span class="lane-tag" id="step-lane"></span><span class="count" id="step-count"></span></div>
+        <p class="scn-title" id="step-scn"></p>
+        <div class="pv" id="step-live" aria-live="polite">
+          <h3 id="step-title"></h3>
+          <p class="pv-text" id="step-text"></p>
+          <div class="io" id="step-io"></div>
+          <p class="ex" id="step-ex"></p>
+          <p class="pv-note" id="step-note" hidden></p>
+        </div>
+        <ol class="steps" id="step-list" aria-label="Steps"></ol>
+      </div>
+
+      <div class="pv" id="pv-node" hidden>
+        <div class="pv-kicker"><span class="lane-tag" id="node-lane"></span><span class="status" id="node-status"></span></div>
+        <div class="pv" aria-live="polite">
+          <h3 id="node-name"></h3>
+          <p class="pv-text" id="node-what"></p>
+          <dl class="nd">
+            <div><dt id="node-holds-label">Holds</dt><dd><p class="ex" id="node-holds"></p></dd></div>
+            <div><dt>Who can see it</dt><dd id="node-who"></dd></div>
+            <div><dt>Status</dt><dd id="node-stat"></dd></div>
+          </dl>
+          <p class="code-name" id="node-code" hidden></p>
+        </div>
+        <div class="pv-actions">
+          <button type="button" class="linkbtn" id="btn-node-back" hidden></button>
+          <button type="button" class="linkbtn" id="btn-node-close">Back to overview</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- OPTIONAL COMPACT VISUALS. Keep only the ones that answer a question the diagram can't. Reuse the running example. -->
+<section class="sec" id="funnel" aria-labelledby="funnel-h">
+  <div class="sec-head">
+    <h2 id="funnel-h">Friday morning: 6 checkouts, 4 paid</h2>
+    <p>Where each checkout stopped, and why.</p>
+  </div>
+  <div class="card funnel hscroll">
+    <div class="f-grid" role="table" aria-label="Checkouts started, stopped and paid">
+      <div class="f-head" role="row">
+        <div role="columnheader"><b>6</b><span>started checkout</span></div>
+        <div role="columnheader"><b>2</b><span>stopped</span></div>
+        <div role="columnheader"><b>4</b><span>paid</span></div>
+      </div>
+      <div class="f-row in" role="row">
+        <div class="f-item" role="cell"><b>#1042 Sam</b><span class="src">Web</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span></div>
+        <div class="f-end" role="cell"><span class="f-line"></span><span class="f-dot"></span><span>Receipt sent 20 s later</span></div>
+      </div>
+      <div class="f-row in" role="row">
+        <div class="f-item" role="cell"><b>#1043 Ana</b><span class="src">App</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span></div>
+        <div class="f-end" role="cell"><span class="f-line"></span><span class="f-dot"></span><span>Packing by 10:05</span></div>
+      </div>
+      <div class="f-row in" role="row">
+        <div class="f-item" role="cell"><b>#1044 Kai</b><span class="src">Web</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span></div>
+        <div class="f-end" role="cell"><span class="f-line"></span><span class="f-dot"></span><span>Paid with a saved card</span></div>
+      </div>
+      <div class="f-row in" role="row">
+        <div class="f-item" role="cell"><b>#1045 Lee</b><span class="src">App</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span></div>
+        <div class="f-end" role="cell"><span class="f-line"></span><span class="f-dot"></span><span>Receipt sent 18 s later</span></div>
+      </div>
+      <div class="f-row out gap" role="row">
+        <div class="f-item" role="cell"><b>#1046 Mo</b><span class="src">Web</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span><svg class="f-x" aria-hidden="true"><use href="#i-no"/></svg><span class="f-why">card declined</span><span class="f-aside">cart kept 7 days</span></div>
+        <div class="f-end" role="cell"></div>
+      </div>
+      <div class="f-row out" role="row">
+        <div class="f-item" role="cell"><b>#1047 Jo</b><span class="src">App</span></div>
+        <div class="f-mid" role="cell"><span class="f-line"></span><svg class="f-x" aria-hidden="true"><use href="#i-no"/></svg><span class="f-why">socks sold out while paying</span></div>
+        <div class="f-end" role="cell"></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">An example morning. The numbers are illustrations, not real orders.</p>
+</section>
+
+<section class="sec" id="statuses" aria-labelledby="statuses-h">
+  <div class="sec-head">
+    <h2 id="statuses-h">What each order status tells Sam</h2>
+    <p>Tap a status to see what it means.</p>
+  </div>
+  <div class="chips">
+    <button type="button" class="chip" aria-pressed="true" data-detail="The card was charged. The receipt arrives within a minute.">Paid</button>
+    <button type="button" class="chip" aria-pressed="false" data-detail="The worker has reserved the items. The order page shows the delivery day.">Packing</button>
+    <button type="button" class="chip" aria-pressed="false" data-detail="The warehouse handed it to the carrier. The order page shows the tracking link.">Shipped</button>
+    <button type="button" class="chip" aria-pressed="false" data-detail="The carrier confirmed delivery. A review request goes out a week later.">Delivered</button>
+    <button type="button" class="chip" aria-pressed="false" data-detail="The money is on its way back to the card. No review request is sent.">Refunded</button>
+  </div>
+  <p class="card chip-detail" id="chip-detail" aria-live="polite"><b>Paid</b><span>The card was charged. The receipt arrives within a minute.</span></p>
+</section>
+
+<section class="sec" id="who-sees" aria-labelledby="who-h">
+  <div class="sec-head">
+    <h2 id="who-h">Who sees what</h2>
+    <p>Each outside service gets only what its step needs.</p>
+  </div>
+  <div class="card matrix hscroll">
+    <table class="mx">
+      <thead>
+        <tr><td></td><th scope="col">Sam<small>the shopper</small></th><th scope="col">Support<small>our team</small></th><th scope="col">Card processor<small>outside</small></th><th scope="col">Email service<small>outside</small></th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Card number</th>
+          <td><span class="part"><svg aria-hidden="true"><use href="#i-part"/></svg>last 4 digits</span></td>
+          <td><span class="part"><svg aria-hidden="true"><use href="#i-part"/></svg>last 4 digits</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>full number</span></td>
+          <td><span class="no"><svg aria-hidden="true"><use href="#i-no"/></svg>never</span></td></tr>
+        <tr><th scope="row">Address</th>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>their own</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>every order</span></td>
+          <td><span class="part"><svg aria-hidden="true"><use href="#i-part"/></svg>postcode only</span></td>
+          <td><span class="no"><svg aria-hidden="true"><use href="#i-no"/></svg>never</span></td></tr>
+        <tr><th scope="row">Items</th>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>their own</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>every order</span></td>
+          <td><span class="no"><svg aria-hidden="true"><use href="#i-no"/></svg>never</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>in the receipt</span></td></tr>
+        <tr><th scope="row">Email address</th>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>their own</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>every order</span></td>
+          <td><span class="no"><svg aria-hidden="true"><use href="#i-no"/></svg>never</span></td>
+          <td><span class="yes"><svg aria-hidden="true"><use href="#i-yes"/></svg>to send mail</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- DECISIONS. Open ones: the question in one line, 1–2 sentences of context, options with a concrete
+     example each, the recommended one marked, "Why" in one sentence, and the exact reply to send. -->
+<section class="sec" id="decisions" aria-labelledby="dec-h">
+  <div class="sec-head">
+    <h2 id="dec-h">Decisions</h2>
+    <p>One needs you. One is settled.</p>
+  </div>
+  <div class="decs">
+    <article class="dec" aria-labelledby="d1-h">
+      <div class="dec-top"><span class="dec-id">D1</span><span class="need">Needs your choice</span></div>
+      <h3 id="d1-h">If an item sells out after the card is charged</h3>
+      <p>Two shoppers can pay for the last pair of socks in the same second. The worker finds out a few seconds after checkout said yes.</p>
+      <div class="opts">
+        <div class="opt rec"><span class="l">A</span><span>Refund that item at once and email the shopper. The rest of the order still ships.<span class="rec-tag">Recommended</span></span></div>
+        <div class="opt"><span class="l">B</span><span>Hold the whole order and have support call the shopper within a day.</span></div>
+      </div>
+      <p><b>Why A:</b> nobody has to step in, and the shopper hears within a minute.</p>
+      <p class="reply">Reply <b>“D1: A”</b> or <b>“D1: B”</b>.</p>
+    </article>
+  </div>
+  <div class="settled">
+    <div class="set-row">
+      <div class="set-id"><span class="dec-id">D2</span>Settled</div>
+      <div><h3>Receipts come from the worker, not from checkout</h3><p>Sam gets the receipt within a minute instead of waiting on the thank-you page.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- APPENDIX FOR BUILDERS. Table and field names, limits, rules, file:line references. Muted on purpose. -->
+<section class="sec appendix" id="builders" aria-labelledby="ap-h">
+  <div class="sec-head">
+    <h2 id="ap-h">For builders</h2>
+    <p>Names, limits and rules behind the picture.</p>
+  </div>
+  <div class="ap-grid">
+    <div>
+      <h3>Stores</h3>
+      <div class="hscroll">
+        <table class="ap-table">
+          <thead><tr><th scope="col">Name</th><th scope="col">Change</th></tr></thead>
+          <tbody>
+            <tr><td><code>orders</code></td><td>Adds <code>review_asked_at</code>. Status moves <code>paid → packing → shipped → delivered</code>, or <code>refunded</code>.</td></tr>
+            <tr><td><code>job_queue</code> new</td><td><code>id</code>, <code>kind</code> (<code>fulfil</code>, <code>review_email</code>), <code>payload</code>, <code>run_after</code>, <code>attempts</code>, <code>locked_until</code>. A worker holds a job for 60 s.</td></tr>
+            <tr><td><code>inventory</code></td><td>Unchanged. The worker reserves with one conditional update per item.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Rules</h3>
+      <ul class="ap-list">
+        <li>Checkout: the card call times out after 10 s, with no retry while the shopper waits.</li>
+        <li>Worker: up to 3 attempts per job, 1, 5 and 30 minutes apart, then support is told.</li>
+        <li>Review request: daily at 09:00 UTC. Skips refunded orders and shoppers who opted out.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ========================================================================
+     DATA: replace this block for your system. The engine below reads it.
+     Coordinates are viewBox units (W × H). Keep 16px outer margins and 16px
+     gaps between regions. Components are 56 tall, stores 68, outside boxes 52–56.
+     Put each box above or below the stores it touches most, so lines stay short.
+     ======================================================================== */
+  const W = 1080, H = 540;
+
+  // Kinds of work. Keys are region ids, which are also CSS hooks (.rg-<id>, .lt-<id>).
+  const LANE_NAME = {
+    live: "Live, while the shopper waits",
+    bg: "Background, runs on its own",
+    later: "Later follow-up",
+    demand: "On demand",
+    band: "Shared store",
+    outside: "Outside service"
+  };
+  const STATUS_NAME = { built: "Built", changing: "Changing", new: "New" };
+
+  // Regions: `at` is where the name starts, "\n" splits the name over two lines,
+  // `when` follows the first line, `cap` lines sit under the name.
+  const REGIONS = [
+    { id: "live", x: 16, y: 16, w: 848, h: 140, name: "Live", when: "while the shopper waits", at: [32, 40] },
+    { id: "outside", x: 880, y: 16, w: 184, h: 372, name: "Outside services", at: [896, 330], cap: ["We keep only the", "result of each call"] },
+    { id: "band", x: 16, y: 206, w: 848, h: 140, name: "Shared\nstores", at: [30, 258], cap: ["every hand-off", "goes through", "one of these"] },
+    { id: "demand", x: 16, y: 396, w: 262, h: 128, name: "On demand", when: "when someone asks", at: [32, 506] },
+    { id: "later", x: 294, y: 396, w: 262, h: 128, name: "Later follow-up", when: "a week later", at: [310, 506] },
+    { id: "bg", x: 572, y: 396, w: 492, h: 128, name: "Background", when: "runs on its own", at: [588, 506] }
+  ];
+
+  // Boxes. kind: "comp" runs, "store" holds data, "ext" is an outside service.
+  // lane: the region it sits in. status: "built" | "changing" | "new".
+  // what / holds / who / statusText fill the panel: one or two short sentences with real-looking values.
+  // code (optional): its name in the code (table, queue, bucket), shown small in the panel.
+  const NODES = {
+    page: { kind: "comp", lane: "live", x: 150, y: 64, w: 180, h: 56, name: "Order page", sub: "“Where’s my order?”", status: "built",
+      what: "Shows the shopper where their order is.",
+      holdsLabel: "Shows", holds: "Order #1042: packing, arrives Thursday.",
+      who: "The shopper, signed in.",
+      statusText: "Built. It reads the status the worker writes, so it never waits on the warehouse." },
+    checkout: { kind: "comp", lane: "live", x: 470, y: 64, w: 190, h: 56, name: "Checkout", sub: "cart, address, pay", status: "changing",
+      what: "Takes the shopper from cart to a paid order.",
+      holdsLabel: "Uses", holds: "Mug ×1, socks ×2, $42.50, card ending 4242.",
+      who: "The shopper. Support sees the finished order, never the card.",
+      statusText: "Changing. Today it also reserves stock and emails the receipt while the shopper waits. Both move to the worker." },
+    cards: { kind: "ext", lane: "outside", x: 894, y: 64, w: 156, h: 56, name: "Card processor", sub: "outside service", status: "built",
+      what: "The outside company that charges the card.",
+      holdsLabel: "We keep", holds: "The charge ID and the answer. Never the card number.",
+      who: "It sees the card number and the amount, not the items.",
+      statusText: "Built." },
+    email: { kind: "ext", lane: "outside", x: 894, y: 148, w: 156, h: 52, name: "Email service", sub: "delivers our mail", status: "built",
+      what: "The outside service that delivers our emails.",
+      holdsLabel: "Sends", holds: "“Your order #1042 is confirmed” to sam@example.com",
+      who: "It sees the email address and the message.",
+      statusText: "Built." },
+    orders: { kind: "store", lane: "band", x: 170, y: 242, w: 140, h: 68, lines: ["Orders"], name: "Orders", status: "changing", code: "orders",
+      what: "Every order: what's in it, what it cost and where it is now.",
+      holdsLabel: "Holds", holds: "#1042 · Sam · $42.50 · paid → packing",
+      who: "Each shopper sees their own. Support sees all of them.",
+      statusText: "Changing. Adds the date we asked for a review." },
+    jobs: { kind: "store", lane: "band", x: 400, y: 242, w: 140, h: 68, lines: ["Job queue"], name: "Job queue", status: "new", code: "job_queue",
+      what: "Work waiting for the worker, oldest first.",
+      holdsLabel: "Holds", holds: "fulfil #1042 · review email for #0987",
+      who: "Only the team.",
+      statusText: "New. It lets checkout finish without waiting for slow work." },
+    stock: { kind: "store", lane: "band", x: 630, y: 242, w: 140, h: 68, lines: ["Stock levels"], name: "Stock levels", status: "built", code: "inventory",
+      what: "How many of each item we have left.",
+      holdsLabel: "Holds", holds: "Mug: 14 left · Socks: 3 left",
+      who: "Shoppers see “in stock” or “sold out”, never the count.",
+      statusText: "Built." },
+    report: { kind: "comp", lane: "demand", x: 34, y: 414, w: 176, h: 56, name: "Sales report", sub: "totals when asked", status: "built",
+      what: "Adds up paid orders when someone opens it.",
+      holdsLabel: "Shows", holds: "September: 1,284 orders · $51,730",
+      who: "The owner and the finance team.",
+      statusText: "Built. Worked out fresh each time, so it stores nothing." },
+    review: { kind: "comp", lane: "later", x: 316, y: 414, w: 196, h: 56, name: "Review request", sub: "a week after delivery", status: "new",
+      what: "Asks each shopper for a review a week after delivery.",
+      holdsLabel: "Sends", holds: "“How was your mug?” to Sam, next Tuesday.",
+      who: "Each shopper gets their own email.",
+      statusText: "New. Runs every morning at 9." },
+    worker: { kind: "comp", lane: "bg", x: 700, y: 414, w: 196, h: 56, name: "Fulfilment worker", sub: "works through the queue", status: "new",
+      what: "Does the slow work after checkout: stock, receipts and status.",
+      holdsLabel: "Uses", holds: "One job at a time, about 3 seconds each.",
+      who: "Nobody sees it. Shoppers see its results.",
+      statusText: "New. A failed job is retried 3 times, then support is told." }
+  };
+
+  // Lines. a → b is the way data moves. bi: data moves both ways (a read and a write, or a call and its answer).
+  // async: nobody waits (drawn dashed). route: "h" side to side in one row, "over" up and across when a box
+  // is in the way (optional y), "side" out of a's right side and up or down the margin (optional x).
+  // label: what moves along the line, in 1–4 words. Never "uses" or "calls".
+  const EDGES = [
+    { id: "stock_checkout", a: "stock", b: "checkout", label: "stock check" },
+    { id: "checkout_cards", a: "checkout", b: "cards", bi: true, route: "h", label: "charge · yes or no" },
+    { id: "checkout_orders", a: "checkout", b: "orders", label: "new order" },
+    { id: "checkout_jobs", a: "checkout", b: "jobs", label: "fulfil job" },
+    { id: "orders_page", a: "orders", b: "page", label: "order status" },
+    { id: "jobs_worker", a: "jobs", b: "worker", async: true, label: "next job" },
+    { id: "worker_stock", a: "worker", b: "stock", async: true, label: "reserve items" },
+    { id: "worker_orders", a: "worker", b: "orders", async: true, label: "new status" },
+    { id: "worker_email", a: "worker", b: "email", async: true, route: "side", label: "emails" },
+    { id: "orders_review", a: "orders", b: "review", bi: true, async: true, label: "delivered orders" },
+    { id: "review_jobs", a: "review", b: "jobs", async: true, label: "email jobs" },
+    { id: "orders_report", a: "orders", b: "report", label: "paid orders" }
+  ];
+
+  // Scenarios: one reviewer question each, 3–7 steps. name and tag go on the button, title heads the panel.
+  // Step: title, text (1–2 sentences), example (tiny and concrete), io [[verb, node id]],
+  // edges [[edge id, "f" | "r" | "b", optional label for this step]] ("b" = there and back),
+  // nodes: light a box when the step happens inside it, lane: this step runs in another kind of work, note: optional.
+  const SCENARIOS = {
+    order: { name: "Place an order", tag: "Live", title: "Sam places an order", lane: "live", steps: [
+      { title: "Check stock", text: "Sam taps Pay. Checkout first checks that every item is still in stock.", io: [["Reads", "stock"]], example: "Mug ×1, socks ×2: all in stock", edges: [["stock_checkout", "f", "2 items in stock"]] },
+      { title: "Charge the card", text: "Checkout asks the card processor to charge the card and waits for a yes or no. It is the only outside call Sam waits for.", io: [["Sends to", "cards"]], example: "$42.50 on the card ending 4242 → approved in 1.2 s", edges: [["checkout_cards", "b", "$42.50 → approved"]] },
+      { title: "Save the order", text: "The order is saved as paid.", io: [["Writes", "orders"]], example: "Order #1042 · paid", edges: [["checkout_orders", "f", "#1042, paid"]] },
+      { title: "Leave a job", text: "Instead of doing the slow work now, checkout leaves a job in the queue.", io: [["Writes", "jobs"]], example: "Job: fulfil #1042", edges: [["checkout_jobs", "f", "fulfil #1042"]] },
+      { title: "Sam is done", text: "Sam sees the thank-you page straight away. The worker takes it from here.", io: [], example: "“Thanks! Order #1042 is confirmed.”", nodes: ["checkout"] }
+    ] },
+    fulfil: { name: "Fulfil in the background", tag: "Background", title: "Fulfilling order #1042", lane: "bg", steps: [
+      { title: "Pick up the job", text: "A few seconds later the worker takes the next job from the queue. Nobody is waiting on it.", io: [["Reads", "jobs"]], example: "fulfil #1042", edges: [["jobs_worker", "f"]] },
+      { title: "Reserve the items", text: "It takes the items out of stock, so they can't be sold twice.", io: [["Writes", "stock"]], example: "Mug 14 → 13 · Socks 3 → 1", edges: [["worker_stock", "f", "mug −1, socks −2"]] },
+      { title: "Email the receipt", text: "It asks the email service to send Sam's receipt.", io: [["Sends to", "email"]], example: "“Your order #1042 is confirmed”", edges: [["worker_email", "f", "receipt #1042"]] },
+      { title: "Update the order", text: "It marks the order as packing.", io: [["Writes", "orders"]], example: "#1042: paid → packing", edges: [["worker_orders", "f", "packing"]] },
+      { title: "Sam checks the order", text: "When Sam opens the order page, it reads the new status. The page never waits on the worker.", io: [["Reads", "orders"]], example: "“Packing · arrives Thursday”", edges: [["orders_page", "f", "packing"]], lane: "live" }
+    ] },
+    review: { name: "Ask for a review", tag: "Later, then background", title: "A review request, a week after delivery", lane: "later", steps: [
+      { title: "Find delivered orders", text: "Every morning at 9 the review request looks for orders delivered a week ago that haven't been asked yet.", io: [["Reads", "orders"]], example: "#1042, delivered last Tuesday", edges: [["orders_review", "f", "delivered 7 days ago"]] },
+      { title: "Queue one email each", text: "It leaves one email job per order and marks the order, so nobody is asked twice.", io: [["Writes", "jobs"], ["Writes", "orders"]], example: "review email for #1042 · asked: 28 Sep", edges: [["review_jobs", "f", "review email"], ["orders_review", "r", "asked today"]] },
+      { title: "The worker sends it", text: "The worker picks up the job like any other and sends the email.", io: [["Reads", "jobs"], ["Sends to", "email"]], example: "“How was your mug?” to Sam", edges: [["jobs_worker", "f", "review email"], ["worker_email", "f", "review request"]], lane: "bg" }
+    ] }
+  };
+  const FIRST = "order"; // the scenario Play starts from the overview
+
+  // Test hook for scripts/verify.mjs, set before the engine runs so a data mistake can still be named.
+  // It exists only when the page is opened from a local file, never on the published page.
+  const TEST = location.protocol === "file:" ? (window.__explorer = { REGIONS, LANE_NAME, NODES, EDGES, SCENARIOS }) : null;
+
+  /* ========================================================================
+     ENGINE: builds the SVG from the data, plays scenarios, places labels.
+     You should not need to change anything below for a new system.
+     ======================================================================== */
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = id => document.getElementById(id);
+  const svg = $("arch");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const gRegions = $("g-regions"), gEdges = $("g-edges"), gNodes = $("g-nodes"), gLabels = $("g-labels"), gTokens = $("g-tokens");
+  const mq = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+  let reduced = !!(mq && mq.matches);
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  for (const id in NODES) { const n = NODES[id]; n.id = id; n.cx = n.x + n.w / 2; n.cy = n.y + n.h / 2; }
+  const EDGE = {}; EDGES.forEach(e => { EDGE[e.id] = e; });
+
+  /* ---- Geometry: spread line ends along each side, then curve between them ---- */
+  const RY = 7; // height of a store's elliptical lid
+  const lidY = (n, px, bottom) => { const t = (px - n.cx) / (n.w / 2), dy = RY * Math.sqrt(Math.max(0, 1 - t * t)); return bottom ? n.y + n.h - RY + dy : n.y + RY - dy; };
+  function sideOf(e, end) {
+    const me = NODES[end === "a" ? e.a : e.b], other = NODES[end === "a" ? e.b : e.a];
+    if (e.route === "h") return me.cx < other.cx ? "right" : "left";
+    return me.cy < other.cy ? "bottom" : "top";
+  }
+  // Group line ends by box side, sort them by where the other end is, and spread them up to 26px apart.
+  function assignPorts() {
+    const buckets = {};
+    EDGES.forEach(e => {
+      if (e.route === "over" || e.route === "side") return; // these routes pick their own ends
+      ["a", "b"].forEach(end => {
+        const key = (end === "a" ? e.a : e.b) + ":" + sideOf(e, end);
+        (buckets[key] = buckets[key] || []).push({ e, end, other: NODES[end === "a" ? e.b : e.a] });
+      });
+    });
+    for (const key in buckets) {
+      const [id, side] = key.split(":"), n = NODES[id], list = buckets[key], horiz = side === "top" || side === "bottom";
+      list.sort((p, q) => horiz ? p.other.cx - q.other.cx : p.other.cy - q.other.cy);
+      const span = Math.min((horiz ? n.w - 40 : n.h - 20), (list.length - 1) * 26);
+      list.forEach((p, i) => {
+        const off = list.length === 1 ? 0 : -span / 2 + span * i / (list.length - 1);
+        let x, y;
+        if (horiz) { x = n.cx + off; y = n.kind === "store" ? lidY(n, x, side === "bottom") : side === "top" ? n.y : n.y + n.h; }
+        else { y = n.cy + off; x = side === "right" ? n.x + n.w : n.x; }
+        p.e["p" + p.end] = { x, y };
+      });
+    }
+  }
+  const r1 = v => Math.round(v * 10) / 10;
+  function pathFor(e) {
+    const A = NODES[e.a], B = NODES[e.b];
+    if (e.route === "over") { // up out of A, across at y, down into B
+      const x0 = A.x + A.w - 22, yT = e.y ?? A.y - 22, x1 = e.x ?? B.cx, s = x1 > x0 ? 1 : -1;
+      return `M${x0} ${A.y} V${yT + 10} Q${x0} ${yT} ${x0 + 10 * s} ${yT} H${x1 - 10 * s} Q${x1} ${yT} ${x1} ${yT + 10} V${B.y}`;
+    }
+    if (e.route === "side") { // out of A's right side, then up or down into B
+      const x0 = A.x + A.w, y0 = A.cy, xR = e.x ?? B.x + B.w - 14, up = B.cy < A.cy, s = up ? -1 : 1;
+      return `M${x0} ${y0} H${xR - 10} Q${xR} ${y0} ${xR} ${y0 + 10 * s} V${up ? B.y + B.h : B.y}`;
+    }
+    const p = e.pa, q = e.pb;
+    if (e.route === "h") {
+      const k = Math.abs(q.x - p.x) * 0.5, s = q.x > p.x ? 1 : -1;
+      return `M${r1(p.x)} ${r1(p.y)} C${r1(p.x + s * k)} ${r1(p.y)} ${r1(q.x - s * k)} ${r1(q.y)} ${r1(q.x)} ${r1(q.y)}`;
+    }
+    const k = Math.abs(q.y - p.y) * 0.55, s = q.y > p.y ? 1 : -1; // soft vertical S between top and bottom ports
+    return `M${r1(p.x)} ${r1(p.y)} C${r1(p.x)} ${r1(p.y + s * k)} ${r1(q.x)} ${r1(q.y - s * k)} ${r1(q.x)} ${r1(q.y)}`;
+  }
+
+  /* ---- Build the drawing ---- */
+  const regionEls = {}, nodeEls = {};
+  REGIONS.forEach(r => {
+    const g = el("g", { class: "region rg-" + r.id, "data-region": r.id }, gRegions);
+    el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, rx: 14 }, g);
+    const [x, y] = r.at, lines = r.name.split("\n");
+    lines.forEach((s, i) => {
+      const t = el("text", { x, y: y + i * 16 }, g);
+      el("tspan", { class: "r-name" }, t).textContent = s;
+      if (i === 0 && r.when) el("tspan", { class: "r-when", dx: 8 }, t).textContent = r.when;
+    });
+    (r.cap || []).forEach((s, i) => { el("text", { class: "r-cap", x, y: y + (lines.length - 1) * 16 + 20 + i * 14 }, g).textContent = s; });
+    regionEls[r.id] = g;
+  });
+
+  const restDir = e => (e.bi ? "both" : "f");
+  function setMarkers(e, kind, dir) {
+    const m = `url(#mk-${kind})`;
+    if (dir === "f" || dir === "both" || dir === "b") e.line.setAttribute("marker-end", m); else e.line.removeAttribute("marker-end");
+    if (dir === "r" || dir === "both" || dir === "b") e.line.setAttribute("marker-start", m); else e.line.removeAttribute("marker-start");
+  }
+  assignPorts();
+  EDGES.forEach(e => {
+    e.g = el("g", { class: "edge" + (e.async ? " async" : ""), "data-edge": e.id }, gEdges);
+    const d = pathFor(e);
+    e.line = el("path", { class: "line", d }, e.g);
+    e.hit = el("path", { class: "hit", d }, e.g);
+    e.len = e.line.getTotalLength();
+    e.pts = [];
+    for (let k = 0; k <= 120; k++) { const p = e.line.getPointAtLength(e.len * k / 120); e.pts.push([p.x, p.y]); }
+    setMarkers(e, "rest", restDir(e));
+    e.hit.addEventListener("mouseenter", () => hoverEdge(e, true));
+    e.hit.addEventListener("mouseleave", () => hoverEdge(e, false));
+  });
+
+  // Status marks differ in shape as well as color: circle = built, half circle = changing, diamond = new.
+  function statusMark(parent, kind, cx, cy) {
+    if (kind === "new") el("path", { class: "sm sm-new", d: `M${cx} ${cy - 5.2} L${cx + 5.2} ${cy} L${cx} ${cy + 5.2} L${cx - 5.2} ${cy} Z` }, parent);
+    else if (kind === "changing") {
+      el("circle", { class: "sm sm-changing", cx, cy, r: 4.3 }, parent);
+      el("path", { class: "sm-half", d: `M${cx} ${cy - 4.3} A4.3 4.3 0 0 1 ${cx} ${cy + 4.3} Z` }, parent);
+    } else el("circle", { class: "sm sm-built", cx, cy, r: 4.5 }, parent);
+  }
+  Object.values(NODES).forEach(n => {
+    const g = el("g", { class: "node k-" + n.kind, id: "node-" + n.id, "data-node": n.id, tabindex: 0, role: "button",
+      "aria-label": `${n.name}. ${LANE_NAME[n.lane]}. ${STATUS_NAME[n.status]}. Show details.` }, gNodes);
+    el("rect", { class: "ring", x: n.x - 4, y: n.y - 4, width: n.w + 8, height: n.h + 8, rx: 13 }, g);
+    if (n.kind === "store") {
+      const { x, y, w, h } = n, lines = n.lines || [n.name], base = lines.length === 1 ? y + 45 : y + 38;
+      el("path", { class: "box", d: `M${x} ${y + RY} A${w / 2} ${RY} 0 0 1 ${x + w} ${y + RY} V${y + h - RY} A${w / 2} ${RY} 0 0 1 ${x} ${y + h - RY} Z` }, g);
+      el("ellipse", { class: "lid", cx: n.cx, cy: y + RY, rx: w / 2, ry: RY }, g);
+      lines.forEach((s, i) => { el("text", { class: "n-title", x: n.cx, y: base + i * 16, "text-anchor": "middle" }, g).textContent = s; });
+      statusMark(g, n.status, x + w - 14, y + 25);
+    } else {
+      el("rect", { class: "box", x: n.x, y: n.y, width: n.w, height: n.h, rx: 10 }, g);
+      el("text", { class: "n-title", x: n.x + 14, y: n.y + (n.h > 54 ? 24 : 22) }, g).textContent = n.name;
+      if (n.sub) el("text", { class: "n-sub", x: n.x + 14, y: n.y + (n.h > 54 ? 42 : 39) }, g).textContent = n.sub;
+      statusMark(g, n.status, n.x + n.w - 15, n.y + 15);
+    }
+    g.addEventListener("click", () => selectNode(n.id));
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); selectNode(n.id); } });
+    g.addEventListener("mouseenter", () => hoverNode(n.id, true));
+    g.addEventListener("mouseleave", () => hoverNode(n.id, false));
+    g.addEventListener("focus", () => hoverNode(n.id, true));
+    g.addEventListener("blur", () => hoverNode(n.id, false));
+    nodeEls[n.id] = g;
+  });
+
+  /* ---- Label placement: score spots along each line, place up to 3 together, fall back to a number ---- */
+  let obstacles = [];
+  function collectObstacles() {
+    obstacles = Object.values(NODES).map(n => ({ x: n.x - 3, y: n.y - 3, w: n.w + 6, h: n.h + 6 }));
+    gRegions.querySelectorAll("text").forEach(t => { const b = t.getBBox(); obstacles.push({ x: b.x - 3, y: b.y - 2, w: b.width + 6, h: b.height + 4 }); });
+  }
+  const overlap = (a, b) => { const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y); return w > 0 && h > 0 ? w * h : 0; };
+  const linesUnder = (avoid, r) => { let c = 0; for (const o of avoid) for (const [x, y] of o.pts) if (x > r.x - 2 && x < r.x + r.w + 2 && y > r.y - 2 && y < r.y + r.h + 2) c++; return c; };
+  const TS = [0.5]; for (let d = 0.04; d <= 0.4401; d += 0.04) TS.push(0.5 - d, 0.5 + d); // middle of the line first
+  function candidates(e, w, h, placed, avoid) {
+    const out = [];
+    TS.forEach((t, i) => {
+      const p = e.line.getPointAtLength(e.len * t), r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
+      if (r.x < 2 || r.y < 2 || r.x + w > W - 2 || r.y + h > H - 2) return;
+      let s = i * 0.01;
+      for (const o of obstacles) s += overlap(r, o) * 10;
+      for (const o of placed) s += overlap(r, o) * 20;
+      s += linesUnder(avoid, r) * 60;
+      out.push({ r, s });
+    });
+    if (!out.length) { const p = e.line.getPointAtLength(e.len / 2); out.push({ r: { x: Math.min(Math.max(2, p.x - w / 2), W - 2 - w), y: p.y - h / 2, w, h }, s: 1e6 }); }
+    return out;
+  }
+  const best = list => list.reduce((a, b) => (b.s < a.s ? b : a));
+  // Up to 3 labels are placed jointly so one never takes another's only clear spot; more go one by one.
+  function placeJoint(items, placed) {
+    if (items.length > 3) { const taken = placed.slice(); return items.map(it => { const r = best(candidates(it.e, it.w, 18, taken, it.avoid)).r; taken.push(r); return r; }); }
+    const C = items.map(it => candidates(it.e, it.w, 18, placed, it.avoid));
+    let bestSet = [], bestScore = Infinity;
+    const pick = (i, chosen, score) => {
+      if (score >= bestScore) return;
+      if (i === C.length) { bestScore = score; bestSet = chosen.slice(); return; }
+      for (const c of C[i]) { let s = score + c.s; for (const o of chosen) s += overlap(c.r, o) * 20; chosen.push(c.r); pick(i + 1, chosen, s); chosen.pop(); }
+    };
+    pick(0, [], 0);
+    return bestSet;
+  }
+  function makePill(text, num, cur, forId) {
+    const g = el("g", { class: "elabel", "data-for": forId }, gLabels);
+    const bg = el("rect", { class: "pill" + (cur ? " cur" : ""), rx: 9, height: 18 }, g);
+    const tx = el("text", { class: "pill-text" }, g); tx.textContent = text;
+    return { g, bg, tx, num, w: tx.getComputedTextLength() + (num ? 32 : 16) };
+  }
+  function positionPill(p, r) {
+    p.bg.setAttribute("x", r.x); p.bg.setAttribute("y", r.y); p.bg.setAttribute("width", p.w);
+    if (p.num) {
+      el("circle", { class: "badge", cx: r.x + 10, cy: r.y + 9, r: 7 }, p.g);
+      el("text", { class: "badge-num", x: r.x + 10, y: r.y + 12.6, "text-anchor": "middle" }, p.g).textContent = p.num;
+    }
+    p.tx.setAttribute("x", r.x + (p.num ? 22 : 8)); p.tx.setAttribute("y", r.y + 12.6);
+  }
+  function drawBadge(e, num, placed, avoid, cur) {
+    const r = best(candidates(e, 18, 18, placed, avoid)).r; placed.push(r);
+    const g = el("g", { class: "ebadge", "data-for": e.id }, gLabels);
+    el("circle", { class: "badge" + (cur ? "" : " vis"), cx: r.x + 9, cy: r.y + 9, r: 8 }, g);
+    el("text", { class: "badge-num", x: r.x + 9, y: r.y + 12.6, "text-anchor": "middle" }, g).textContent = num;
+  }
+  function drawNodeBadge(id, num, slot, vis, placed) {
+    const n = NODES[id], cx = n.x + 2 + slot * 20, cy = n.y - 1;
+    placed.push({ x: cx - 9, y: cy - 9, w: 18, h: 18 });
+    const g = el("g", { class: "nbadge", "data-for": id }, gLabels);
+    el("circle", { class: "badge" + (vis ? " vis" : ""), cx, cy, r: 8.5 }, g);
+    el("text", { class: "badge-num", x: cx, y: cy + 3.6, "text-anchor": "middle" }, g).textContent = num;
+  }
+
+  /* ---- State and rendering. Every render starts from a clean slate, so Back/Next/jumps can't leave stale highlights. ---- */
+  const state = { mode: "rest", sc: null, step: 0, playing: false, node: null, resume: null };
+  let timer = null;
+  function clearClasses() {
+    EDGES.forEach(e => { e.g.classList.remove("is-dim", "is-pending", "is-visited", "is-current", "is-related", "is-faded", "is-hover"); setMarkers(e, "rest", restDir(e)); });
+    Object.values(nodeEls).forEach(g => g.classList.remove("is-dim", "is-pending", "is-visited", "is-current", "is-selected"));
+    Object.values(regionEls).forEach(g => g.classList.remove("is-dim"));
+    gLabels.textContent = "";
+  }
+  const stepNodes = s => { const set = new Set(s.nodes || []); (s.edges || []).forEach(([id]) => { set.add(EDGE[id].a); set.add(EDGE[id].b); }); return set; };
+
+  function renderDiagram() {
+    clearClasses();
+    if (state.mode === "scenario") {
+      const sc = SCENARIOS[state.sc], cur = sc.steps[state.step];
+      const allNodes = new Set(), allEdges = new Set();
+      sc.steps.forEach(s => { stepNodes(s).forEach(n => allNodes.add(n)); (s.edges || []).forEach(([id]) => allEdges.add(id)); });
+      const visEdges = new Map(), visNodes = new Set();
+      sc.steps.slice(0, state.step).forEach((s, i) => { (s.edges || []).forEach(([id, dir]) => visEdges.set(id, { num: i + 1, dir })); stepNodes(s).forEach(n => visNodes.add(n)); });
+      const curEdges = new Map((cur.edges || []).map(([id, dir, lbl]) => [id, { dir, lbl }]));
+      const curNodes = stepNodes(cur);
+      EDGES.forEach(e => {
+        if (curEdges.has(e.id)) { e.g.classList.add("is-current"); setMarkers(e, "cur", curEdges.get(e.id).dir); gEdges.appendChild(e.g); } // draw on top
+        else if (visEdges.has(e.id)) { e.g.classList.add("is-visited"); setMarkers(e, "vis", visEdges.get(e.id).dir); }
+        else if (allEdges.has(e.id)) e.g.classList.add("is-pending");
+        else e.g.classList.add("is-dim");
+      });
+      for (const id in nodeEls) nodeEls[id].classList.add(curNodes.has(id) ? "is-current" : visNodes.has(id) ? "is-visited" : allNodes.has(id) ? "is-pending" : "is-dim");
+      const liveRegions = new Set([...allNodes].map(id => NODES[id].lane));
+      REGIONS.forEach(r => { if (!liveRegions.has(r.id)) regionEls[r.id].classList.add("is-dim"); });
+
+      // Labels: badges on boxes for steps without a line, then this step's labels, then numbers on visited lines.
+      const placed = [], slots = {};
+      sc.steps.slice(0, state.step + 1).forEach((s, i) => {
+        if (!(s.edges && s.edges.length)) (s.nodes || []).forEach(id => { slots[id] = slots[id] || 0; drawNodeBadge(id, i + 1, slots[id]++, i < state.step, placed); });
+      });
+      const lit = [...new Set([...curEdges.keys(), ...visEdges.keys()])].map(id => EDGE[id]);
+      const others = e => lit.filter(o => o !== e);
+      const items = [...curEdges].map(([id, v]) => ({ e: EDGE[id], p: makePill(v.lbl || EDGE[id].label, state.step + 1, true, id) }));
+      const spots = placeJoint(items.map(it => ({ e: it.e, w: it.p.w, avoid: others(it.e) })), placed);
+      // A label that can't sit clear of boxes, text, other labels or other lit lines becomes a number badge.
+      const kept = [];
+      items.forEach((it, i) => {
+        const r = spots[i];
+        const clash = linesUnder(others(it.e), r) > 0 || obstacles.some(o => overlap(r, o) > 0) || placed.some(o => overlap(r, o) > 0) || kept.some(o => overlap(r, o) > 0);
+        if (clash) it.fallback = true; else { positionPill(it.p, r); kept.push(r); }
+      });
+      placed.push(...kept);
+      items.forEach(it => { if (it.fallback) { it.p.g.remove(); drawBadge(it.e, state.step + 1, placed, others(it.e), true); } });
+      visEdges.forEach((v, id) => { if (!curEdges.has(id)) drawBadge(EDGE[id], v.num, placed, others(EDGE[id]), false); });
+    } else if (state.mode === "node") {
+      const id = state.node, related = new Set([id]);
+      EDGES.forEach(e => {
+        if (e.a === id || e.b === id) { e.g.classList.add("is-related"); setMarkers(e, "hover", restDir(e)); related.add(e.a); related.add(e.b); }
+        else e.g.classList.add("is-dim");
+      });
+      for (const nid in nodeEls) { if (nid === id) nodeEls[nid].classList.add("is-selected"); else if (!related.has(nid)) nodeEls[nid].classList.add("is-dim"); }
+    }
+  }
+
+  /* ---- Tokens: a dot travels along each lit line, eased, then fades ---- */
+  let raf = null, tokens = [];
+  function stopTokens() { if (raf) cancelAnimationFrame(raf); raf = null; tokens = []; gTokens.textContent = ""; }
+  const ease = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  function runTokens(step) {
+    stopTokens();
+    if (reduced || !(step.edges && step.edges.length)) return 0;
+    let longest = 0;
+    step.edges.forEach(([id, dir]) => {
+      const e = EDGE[id], legs = dir === "b" ? ["f", "r"] : [dir], dur = Math.max(700, Math.min(1300, e.len * 2.2));
+      tokens.push({ e, legs, dur, start: null, halo: el("circle", { class: "token-halo", r: 9 }, gTokens), core: el("circle", { class: "token", r: 4.5 }, gTokens) });
+      longest = Math.max(longest, dur * legs.length);
+    });
+    const tick = now => {
+      let alive = false;
+      tokens.forEach(k => {
+        if (k.start === null) k.start = now;
+        const t0 = now - k.start, total = k.dur * k.legs.length, done = t0 >= total;
+        const leg = Math.min(k.legs.length - 1, Math.floor(t0 / k.dur));
+        const t = done ? 1 : ease((t0 - leg * k.dur) / k.dur);
+        const p = k.e.line.getPointAtLength(k.e.len * (k.legs[leg] === "f" ? t : 1 - t));
+        const fade = done ? Math.max(0, 1 - (t0 - total) / 400) : 1;
+        for (const c of [k.core, k.halo]) { c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("opacity", fade); }
+        if (fade > 0) alive = true;
+      });
+      raf = alive ? requestAnimationFrame(tick) : null;
+      if (!alive) gTokens.textContent = "";
+    };
+    raf = requestAnimationFrame(tick);
+    return longest;
+  }
+
+  /* ---- Side panel ---- */
+  const pvRest = $("pv-rest"), pvStep = $("pv-step"), pvNode = $("pv-node");
+  const btnBack = $("btn-back"), btnNext = $("btn-next"), btnPlay = $("btn-play"), btnReset = $("btn-reset");
+  const ICON = { play: '<path d="M3 1.8v8.4L10 6z" fill="currentColor"/>', pause: '<path d="M3 2h2.2v8H3zM6.8 2H9v8H6.8z" fill="currentColor"/>' };
+  const glyph = (id, cls) => `<svg${cls ? ` class="${cls}"` : ""} aria-hidden="true"><use href="#${id}"/></svg>`;
+  function setLane(node, lane) { node.className = "lane-tag lt-" + lane; node.textContent = LANE_NAME[lane]; }
+
+  function renderPanel() {
+    const sc = state.sc ? SCENARIOS[state.sc] : null, inSc = state.mode === "scenario";
+    const atEnd = inSc && state.step >= sc.steps.length - 1;
+    pvRest.hidden = state.mode !== "rest"; pvStep.hidden = !inSc; pvNode.hidden = state.mode !== "node";
+    btnBack.disabled = !inSc || state.step === 0;
+    btnNext.disabled = !inSc || atEnd;
+    btnReset.disabled = state.mode === "rest";
+    $("play-icon").innerHTML = state.playing ? ICON.pause : ICON.play;
+    $("play-label").textContent = state.playing ? "Pause" : atEnd ? "Replay" : "Play";
+    btnPlay.setAttribute("aria-label", state.playing ? "Pause" : inSc ? (atEnd ? "Replay this scenario" : "Play this scenario") : "Play the first scenario");
+    document.querySelectorAll(".sc").forEach(b => b.setAttribute("aria-pressed", String(inSc && b.dataset.sc === state.sc)));
+    if (inSc) {
+      const s = sc.steps[state.step];
+      setLane($("step-lane"), s.lane || sc.lane);
+      $("step-count").textContent = `Step ${state.step + 1} of ${sc.steps.length}`;
+      $("step-scn").textContent = sc.title;
+      $("step-title").textContent = `${state.step + 1}. ${s.title}`;
+      $("step-text").textContent = s.text;
+      const io = $("step-io"); io.textContent = "";
+      (s.io || []).forEach(([verb, id]) => {
+        const sp = document.createElement("span");
+        sp.innerHTML = glyph(NODES[id].kind === "ext" ? "i-ext" : "i-store") + "<b></b><i></i>";
+        sp.querySelector("b").textContent = verb; sp.querySelector("i").textContent = NODES[id].name;
+        io.appendChild(sp);
+      });
+      io.hidden = !(s.io && s.io.length);
+      $("step-ex").textContent = s.example;
+      const note = $("step-note"); note.hidden = !s.note; note.textContent = s.note || "";
+      const list = $("step-list"); list.textContent = "";
+      sc.steps.forEach((st, i) => {
+        const li = document.createElement("li"), b = document.createElement("button");
+        b.type = "button"; b.id = `step-${state.sc}-${i + 1}`;
+        if (i === state.step) b.setAttribute("aria-current", "step");
+        if (i < state.step) b.className = "done";
+        b.innerHTML = '<span class="n"></span><span></span>';
+        b.firstChild.textContent = i + 1; b.lastChild.textContent = st.title;
+        b.addEventListener("click", () => { pause(); go(i); const again = $(`step-${state.sc}-${i + 1}`); if (again) again.focus(); });
+        li.appendChild(b); list.appendChild(li);
+      });
+    } else if (state.mode === "node") {
+      const n = NODES[state.node];
+      setLane($("node-lane"), n.lane);
+      $("node-status").innerHTML = glyph("i-" + n.status, "st st-" + n.status);
+      $("node-status").append(STATUS_NAME[n.status]);
+      $("node-name").textContent = n.name;
+      $("node-what").textContent = n.what;
+      $("node-holds-label").textContent = n.holdsLabel || "Holds";
+      $("node-holds").textContent = n.holds;
+      $("node-who").textContent = n.who;
+      $("node-stat").textContent = n.statusText;
+      const code = $("node-code"); code.hidden = !n.code; code.textContent = n.code ? "Name in the code: " + n.code : "";
+      const back = $("btn-node-back"); back.hidden = !state.resume;
+      if (state.resume) back.textContent = `Back to ${SCENARIOS[state.resume.sc].name}, step ${state.resume.step + 1}`;
+    }
+  }
+
+  function render(animate) {
+    renderDiagram(); renderPanel();
+    if (state.mode === "scenario" && animate) return runTokens(SCENARIOS[state.sc].steps[state.step]);
+    stopTokens(); return 0;
+  }
+
+  /* ---- Controls ---- */
+  // Autoplay stays on a step long enough to read it.
+  function schedule(anim) {
+    clearTimeout(timer);
+    if (!state.playing) return;
+    const s = SCENARIOS[state.sc].steps[state.step], words = (s.text + " " + s.example).split(/\s+/).length;
+    timer = setTimeout(() => {
+      if (state.step < SCENARIOS[state.sc].steps.length - 1) { state.step++; schedule(render(true)); }
+      else { state.playing = false; renderPanel(); }
+    }, Math.max(4200, anim + 1800, words * 230));
+  }
+  function pause() { state.playing = false; clearTimeout(timer); }
+  function go(i) { state.step = i; render(true); }
+  function startScenario(id, autoplay) {
+    pause();
+    Object.assign(state, { mode: "scenario", sc: id, step: 0, node: null, resume: null, playing: !!autoplay && !reduced });
+    schedule(render(true));
+  }
+  function reset() { pause(); Object.assign(state, { mode: "rest", sc: null, step: 0, node: null, resume: null }); render(false); }
+  function selectNode(id) {
+    if (state.mode === "scenario") state.resume = { sc: state.sc, step: state.step };
+    else if (state.mode === "rest") state.resume = null;
+    pause(); state.mode = "node"; state.node = id; render(false);
+  }
+
+  const scWrap = $("scenarios");
+  for (const id in SCENARIOS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sc"; b.id = "sc-" + id; b.dataset.sc = id; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = '<span class="sc-name"></span><span class="sc-lane"></span>';
+    b.firstChild.textContent = SCENARIOS[id].name; b.lastChild.textContent = SCENARIOS[id].tag;
+    b.addEventListener("click", () => startScenario(id, true));
+    scWrap.appendChild(b);
+  }
+  btnNext.addEventListener("click", () => { pause(); if (state.step < SCENARIOS[state.sc].steps.length - 1) go(state.step + 1); });
+  btnBack.addEventListener("click", () => { pause(); if (state.step > 0) go(state.step - 1); });
+  btnReset.addEventListener("click", reset);
+  btnPlay.addEventListener("click", () => {
+    if (state.playing) { pause(); renderPanel(); return; }
+    if (state.mode !== "scenario") { const r = state.resume; Object.assign(state, { mode: "scenario", sc: r ? r.sc : FIRST, step: r ? r.step : 0, node: null, resume: null }); }
+    if (state.step >= SCENARIOS[state.sc].steps.length - 1) state.step = 0;
+    state.playing = true;
+    schedule(render(true));
+  });
+  $("btn-node-close").addEventListener("click", reset);
+  $("btn-node-back").addEventListener("click", () => {
+    const r = state.resume; if (!r) return;
+    Object.assign(state, { mode: "scenario", sc: r.sc, step: r.step, node: null, resume: null });
+    render(true);
+  });
+  // Arrow keys work only while focus is inside the explorer; the page's own scrolling and keys stay untouched.
+  $("explorer").addEventListener("keydown", ev => {
+    if (ev.target.closest && ev.target.closest(".steps")) return;
+    if (state.mode === "scenario" && ev.key === "ArrowRight") { ev.preventDefault(); btnNext.click(); }
+    else if (state.mode === "scenario" && ev.key === "ArrowLeft") { ev.preventDefault(); btnBack.click(); }
+    else if (ev.key === "Escape" && state.mode !== "rest") { ev.preventDefault(); reset(); }
+  });
+  if (mq) {
+    const onChange = e => { reduced = e.matches; if (reduced) { pause(); stopTokens(); renderPanel(); } };
+    if (mq.addEventListener) mq.addEventListener("change", onChange); else if (mq.addListener) mq.addListener(onChange);
+  }
+
+  /* ---- Hover: at rest, a line shows its label and a box lights its lines ---- */
+  let hoverLabel = null;
+  function hoverEdge(e, on) {
+    if (hoverLabel) { hoverLabel.remove(); hoverLabel = null; }
+    if (state.mode === "scenario") return;
+    e.g.classList.toggle("is-hover", on);
+    if (state.mode === "rest") setMarkers(e, on ? "hover" : "rest", restDir(e));
+    if (on) { const p = makePill(e.label, null, false, e.id); positionPill(p, best(candidates(e, p.w, 18, [], [])).r); hoverLabel = p.g; }
+  }
+  function hoverNode(id, on) {
+    if (state.mode !== "rest") return;
+    EDGES.forEach(e => {
+      const rel = e.a === id || e.b === id;
+      e.g.classList.toggle("is-related", on && rel);
+      e.g.classList.toggle("is-faded", on && !rel);
+      setMarkers(e, on && rel ? "hover" : "rest", restDir(e));
+    });
+  }
+
+  /* ---- Tap-to-explain chips (optional section): the text lives in each chip's data-detail ---- */
+  const detail = $("chip-detail");
+  if (detail) document.querySelectorAll(".chip").forEach(c => {
+    const show = () => {
+      document.querySelectorAll(".chip").forEach(o => o.setAttribute("aria-pressed", String(o === c)));
+      detail.innerHTML = "<b></b><span></span>";
+      detail.firstChild.textContent = c.textContent; detail.lastChild.textContent = c.dataset.detail;
+    };
+    c.addEventListener("click", show); c.addEventListener("mouseenter", show); c.addEventListener("focus", show);
+  });
+
+  /* ---- Boot ---- */
+  collectObstacles(); render(false);
+  // Text widths change when the web font arrives, so measure again.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { collectObstacles(); render(false); });
+  if (TEST) Object.assign(TEST, { state, startScenario, go, reset, selectNode, pause });
+})();
+</script>

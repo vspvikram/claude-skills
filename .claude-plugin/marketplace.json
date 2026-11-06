@@ -1,0 +1,26 @@
+{
+  "name": "vspvikram-skills",
+  "owner": {
+    "name": "Vikram Singh"
+  },
+  "metadata": {
+    "description": "Skills for explaining and replaying how software systems and AI workflows work, as interactive pages.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "interactive-architecture-explainer",
+      "description": "Build an interactive architecture or workflow explainer page that a non-builder can review: one diagram, scenario buttons that play a path step by step, a plain-language side panel, and the decisions to make.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./skills/interactive-architecture-explainer"]
+    },
+    {
+      "name": "workflow-trace-replay",
+      "description": "Record real runs of an AI or agent workflow and build a replay page: the workflow as a state machine, every call on a timeline, a funnel, and a pop-up with exactly what each model call was sent and returned.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./skills/workflow-trace-replay"]
+    }
+  ]
+}
